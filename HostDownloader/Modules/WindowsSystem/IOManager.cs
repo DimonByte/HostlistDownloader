@@ -83,7 +83,7 @@ namespace HostDownloader.Modules.WindowsSystem
             }
             if (ShowHelp)
             {
-                Console.WriteLine("Configuration files and folders have been created in the directory where this program is stored. Please refer to the documentation to configure.");
+                Console.WriteLine("[!] Configuration files and folders have been created in the directory where this program is stored. Please refer to the documentation to configure. HostDownloader will now exit.");
                 Environment.Exit(0);
             }
             if (checkForCorruption)

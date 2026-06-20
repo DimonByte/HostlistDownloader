@@ -23,8 +23,8 @@
 using HostDownloader.Modules.DownloadSystem;
 using HostDownloader.Modules.WindowsSystem;
 
-Console.WriteLine("HostDownloader starting...");
 IOManager.CreateNecessaryDirectoriesAndFiles();
 TraceLogger.ClearExpiredLogs();
 HostListManager.UpdateLists();
 TraceLogger.Log("HostDownloader complete.");
+Environment.Exit(0);
