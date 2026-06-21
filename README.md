@@ -24,9 +24,10 @@ HostlistDownloader streamlines hostlists by automatically fetching lists from re
 
 Define your source URLs and user-defined domains in the INI files located within `hostfiles/`. This configuration system provides clear separation between blocklists, whitelists, and raw downloads.
 
-1. Edit the `blocklist.ini` files with URL paths of the host list. (Seperated by line)
+1. Run HostfileDownloader. It will create the blank configuration files for you.
+1. Edit the `blocklist.ini` files in `hostfiles/blocklist.ini` with URL paths of the host list. (Seperated by line)
 2. Ensure source domains are accessible (or use proxies configured in app settings).
-3. Run the utility; it will download the host lists and will create `combined-...txt` outputs automatically
+3. Run HostfileDownloader again; it will download the host lists and will create `combined-...txt` outputs automatically, with the duplicates and the comments removed.
 
 ### File Structure Overview
 
