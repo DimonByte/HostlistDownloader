@@ -220,16 +220,8 @@ namespace HostDownloader.Modules.WindowsSystem
             {
                 try
                 {
-                    if (file.Contains("combined"))
-                    {
-                        TraceLogger.Log($"{file} cleared instead of deleted.");
-                        File.WriteAllText(file, "");
-                    }
-                    else
-                    {
-                        TraceLogger.Log($"{file} deleted.");
-                        File.Delete(file);
-                    }
+                    TraceLogger.Log($"{file} deleted.");
+                    File.Delete(file);
                 }
                 catch (Exception ex)
                 {
