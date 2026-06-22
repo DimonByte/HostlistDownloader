@@ -25,9 +25,10 @@ HostlistDownloader streamlines hostlists by automatically fetching lists from re
 Define your source URLs and user-defined domains in the INI files located within `hostfiles/`. This configuration system provides clear separation between blocklists, whitelists, and raw downloads.
 
 1. Run HostfileDownloader. It will create the blank configuration files for you.
-1. Edit the `blocklist.ini` files in `hostfiles/blocklist.ini` with URL paths of the host list. (Seperated by line)
-2. Ensure source domains are accessible (or use proxies configured in app settings).
-3. Run HostfileDownloader again; it will download the host lists and will create `combined-...txt` outputs automatically, with the duplicates and the comments removed.
+2. Edit the `blocklist.ini` files in `hostfiles/blocklist.ini` with URL paths of the host list. (Seperated by line)
+3. Edit the `formattype.ini` file in `hostfiles/formattype.ini`. The valid settings are "hosts", "host", "domain", "iponly". (Default is domain)
+4. Ensure source domains are accessible (or use proxies configured in app settings).
+5. Run HostfileDownloader again; it will download the host lists and will create `combined-...txt` outputs automatically, with the duplicates and the comments removed.
 
 ### File Structure Overview
 
@@ -37,5 +38,6 @@ Define your source URLs and user-defined domains in the INI files located within
 | [`hostfiles/whitelist.ini`](#)  | Contains URLs to remote whitelists. |
 | [`hostfiles/userwebsiteblocklist.ini`](#)| Individual domain-only blocks (e.g., `google.com` prevents website access). |
 | [`hostfiles/userwebsitewhitelist.ini`](#)| Individual domain-only allows (e.g., `google.com` allows website access). |
+| [`hostfiles/formattype.ini`](#)| Tells HostlistDownloader what format the combined list should be. The valid settings are "hosts", "host", "domain", "iponly". |
 | [`hostfiles/blocklist/combined-blocklist.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs processed and merged locally. |
 | [`hostfiles/whitelist/combined-whitelist.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs processed and merged locally. |

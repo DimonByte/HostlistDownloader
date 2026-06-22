@@ -20,13 +20,29 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
+using HostlistDownloader.Modules;
 using HostlistDownloader.Modules.DownloadSystem;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.Reflection;
+
 Console.WriteLine($"--HostlistDownloader-- ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
+
 Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
 IOManager.CreateNecessaryDirectoriesAndFiles();
 TraceLogger.ClearExpiredLogs();
-HostListManager.UpdateLists();
-TraceLogger.Log("HostlistDownloader complete. Exiting...");
+
+HostListManager.UpdateLists(); //Main Update Loop
+
+IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
+IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
+
+if (!HostListManager.ProblemDuringUpdate)
+{
+    TraceLogger.Log("Hostfiles updated successfully!");
+}
+else
+{
+    TraceLogger.Log("A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
+}
+
 Environment.Exit(0);

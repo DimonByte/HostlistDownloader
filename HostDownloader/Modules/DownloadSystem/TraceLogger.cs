@@ -20,6 +20,7 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
+using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -30,7 +31,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
     public static class TraceLogger
     {
         private static readonly Lock _lock = new();
-        private static readonly string _logDirectory = "logs";
+        private static readonly string _logDirectory = IOManager.LogsLocation;
         private static string _currentDate = DateTime.Now.ToString("dd-MM-yyyy");
         private static DateTime _lastDateCheck = DateTime.MinValue;
 
