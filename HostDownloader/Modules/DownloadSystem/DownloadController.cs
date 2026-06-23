@@ -69,8 +69,15 @@ namespace HostlistDownloader.Modules.DownloadSystem
 
                         if (!string.IsNullOrEmpty(eTag) && !string.IsNullOrEmpty(storedETag) && eTag == storedETag && !forceMode)
                         {
-                            TraceLogger.Log("ETag matches - file is already up to date. Skipping download.");
-                            return true;
+                            if (!File.Exists(localPath)) //Check if host file doesn't exist, but etag does.
+                            {
+                                TraceLogger.Log("ETag exists but the host file is missing. proceeding with download.");
+                            }
+                            else
+                            {
+                                TraceLogger.Log("ETag matches - file is already up to date. Skipping download.");
+                                return true;
+                            }
                         }
                         else
                         {

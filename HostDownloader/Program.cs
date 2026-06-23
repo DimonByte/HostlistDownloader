@@ -37,7 +37,7 @@ if (!NetworkChecker.IsNetworkAvailable())
 }
 
 bool force = false;
-List<string> remainingArgs = new List<string>();
+List<string> remainingArgs = [];
 
 foreach (string arg in args)
 {
@@ -56,8 +56,8 @@ TraceLogger.ClearExpiredLogs();
 
 HostListManager.UpdateLists(force); //Main Update Loop
 
-IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
-IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
+//IOManager.ClearTempFiles(IOManager.BlockListFolderLocation); //Cant clear out hostfiles... used for etags.
+//IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
 
 watch.Stop();
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
