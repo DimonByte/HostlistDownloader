@@ -73,7 +73,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
         }
 
-        public static void Log(string message, StatusSeverityType severity = StatusSeverityType.Information,
+        public static void Log(string message, StatusSeverityType severity = StatusSeverityType.Information, int PassedErrorCode = 1,
                               [CallerMemberName] string memberName = "",
                               [CallerLineNumber] int lineNumber = 0)
         {
@@ -116,8 +116,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
             if (severity == StatusSeverityType.Fatal)
             {
-                Log($"[FAULT STOP] A fatal exception has occurred - HostDirectory must exit. Trace Message: {logEntry}", StatusSeverityType.Error);
-                Environment.Exit(1);
+                Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ErrorCodes.GetDescription(PassedErrorCode)}) - HostDirectory must exit. Trace Message: {logEntry}", StatusSeverityType.Error);
+                Environment.Exit(PassedErrorCode);
             }
         }
     }

@@ -33,7 +33,7 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if 
 IOManager.CreateNecessaryDirectoriesAndFiles();
 if (!NetworkChecker.IsNetworkAvailable())
 {
-    TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal);
+    TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ErrorCodes.NetworkConnectionFailed);
 }
 
 bool force = false;
@@ -67,6 +67,7 @@ if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates
 else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
     TraceLogger.Log($"(UPDATED WITH ISSUES) Some hostfiles have updated successfully in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
+    Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
 }
 else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedUpdates)
 {
@@ -75,6 +76,5 @@ else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedU
 else //Problem and no downloads
 {
     TraceLogger.Log("(PROBLEM) A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
+    Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
-
-Environment.Exit(0);

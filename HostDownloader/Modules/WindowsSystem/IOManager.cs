@@ -34,8 +34,8 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public static readonly string IniWhiteListFileLocation = "hostfiles/whitelist.ini";
         public static readonly string IniUserWebsiteBlockListFileLocation = "hostfiles/userwebsiteblocklist.ini";
         public static readonly string IniUserWebsiteWhiteListFileLocation = "hostfiles/userwebsitewhitelist.ini";
-        public static readonly string CombinedBlockListFileLocation = "hostfiles/blocklist/combined-blocklist.txt";
-        public static readonly string CombinedWhiteListFileLocation = "hostfiles/whitelist/combined-whitelist.txt";
+        public static readonly string CombinedBlockListFileLocation = "hostfiles/blocklist/HLDcombined-blocklist.txt";
+        public static readonly string CombinedWhiteListFileLocation = "hostfiles/whitelist/HLDcombined-whitelist.txt";
         public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
 
@@ -56,7 +56,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                     catch (Exception ex)
                     {
-                        TraceLogger.Log($"Error creating directory {dir}: {ex}", Enums.StatusSeverityType.Fatal);
+                        TraceLogger.Log($"Error creating directory {dir}: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.DirectoryCreationFailed);
                     }
                 }
             }
@@ -108,11 +108,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 if (!string.Equals(appDir, currentDir, StringComparison.OrdinalIgnoreCase))
                 {
-                    TraceLogger.Log($"HostfileDownloader must be run from the directory where it is stored. Application Path: {appDir} - Path that was passed: {currentDir}. To fix this, you must CD to the path in your terminal where HostfileDownloader is stored '{appDir}' and try again.", Enums.StatusSeverityType.Fatal);
+                    TraceLogger.Log($"HostfileDownloader must be run from the directory where it is stored.\nApplication Path: {appDir} - Path that was passed: {currentDir}. To fix this, you must CD to the path in your terminal where HostfileDownloader is stored '{appDir}' and try again.", Enums.StatusSeverityType.Fatal, ErrorCodes.WrongExecutionDirectory);
                 }
                 bool corruptionDetected = false;
                 //Stage 1: Check blocklist and whitelist INI files for corruption (invalid entries)
-                string[] configFiles = ["hostfiles/blocklist.ini", "hostfiles/whitelist.ini"];
+                string[] configFiles = [IniBlockListFileLocation, IniWhiteListFileLocation];
                 foreach (string configFile in configFiles)
                 {
                     if (File.Exists(configFile))
@@ -137,11 +137,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                     else
                     {
-                        TraceLogger.Log($"Critical configuration file missing: {configFile}. HostDirectory cannot continue without this file. Please ensure the file exists and is accessible.", Enums.StatusSeverityType.Fatal);
+                        TraceLogger.Log($"Critical configuration file missing: {configFile}. HostDirectory cannot continue without this file. Please ensure the file exists and is accessible.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationFileMissing);
                     }
                 }
                 //Stage 2: Check user blocklist and whitelist INI files for corruption (invalid entries), they should only contain domain names, not full URLs. So google.com is valid, but http://google.com is not.
-                string[] userConfigFiles = ["hostfiles/userwebsiteblocklist.ini", "hostfiles/userwebsitewhitelist.ini"];
+                string[] userConfigFiles = [IniUserWebsiteBlockListFileLocation, IniUserWebsiteWhiteListFileLocation];
                 foreach (string userConfigFile in userConfigFiles)
                 {
                     if (File.Exists(userConfigFile))
@@ -166,7 +166,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                     else
                     {
-                        TraceLogger.Log($"Critical configuration file missing: {userConfigFile}. HostlistDownloader cannot continue without this file. Please ensure the file exists and is accessible.", Enums.StatusSeverityType.Fatal);
+                        TraceLogger.Log($"Critical configuration file missing: {userConfigFile}. HostlistDownloader cannot continue without this file. Please ensure the file exists and is accessible.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationFileMissing);
                     }
                 }
                 TraceLogger.Log("Configuration corruption check completed.");
@@ -177,7 +177,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Corruption Check failure! {ex}", Enums.StatusSeverityType.Fatal);
+                TraceLogger.Log($"Corruption Check failure! {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
             }
         }
 
@@ -315,7 +315,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         public static void MergeFiles(string sourceFolder, string outputFile)
         {
-            var files = Directory.GetFiles(sourceFolder, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)); // Fixed: was ".txt"
+            var files = Directory.GetFiles(sourceFolder, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase)); // Fixed: was ".txt"
             if (!files.Any())
             {
                 TraceLogger.Log($"No files found to merge in {sourceFolder}.", Enums.StatusSeverityType.Warning);
@@ -331,7 +331,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 int processedFiles = 0;
                 foreach (var file in files)
                 {
-                    if (file.Contains("combined-"))
+                    if (file.Contains("HLDcombined-"))
                     {
                         Debug.WriteLine($"Combined file {file} ignored.");
                         continue;
@@ -392,7 +392,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             //It made sense in IOManager when I was trying to implement a ClearFiles deletion attempt system, which included Task.Wait - Since the thread would wait and cause havok.
             //I HAVE to duplicate the ClearFiles code from above plus the ONE change where it filters it based on combined. This fixes the problem.
             //I honestly don't know why and I don't even want to know. It's fixed, and I'm happy.
-            var files = Directory.GetFiles(folder, "*.*").Where(f => !Path.GetFileName(f).StartsWith("combined-", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase));
+            var files = Directory.GetFiles(folder, "*.*").Where(f => !Path.GetFileName(f).StartsWith("HLDcombined-", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase));
             foreach (var file in files)
             {
                 try
@@ -440,7 +440,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (FileNotFoundException ex1)
             {
-                TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the combined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the HLDcombined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
             }
             catch (Exception ex)
             {

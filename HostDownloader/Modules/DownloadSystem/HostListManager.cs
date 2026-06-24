@@ -38,7 +38,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
 
             if (string.IsNullOrEmpty(blockListIni) && string.IsNullOrEmpty(whiteListIni))
             {
-                TraceLogger.Log("Blocklist and Whitelist INI are not configured. Please configure HostlistDownloader.", Enums.StatusSeverityType.Fatal);
+                TraceLogger.Log("Blocklist and Whitelist INI are not configured.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationFileMissing);
                 return;
             }
 
@@ -129,31 +129,24 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 TraceLogger.Log("No URLs found in the configuration file.", Enums.StatusSeverityType.Warning);
                 return;
             }
-
-            var startTime = DateTime.Now;
+            DateTime startTime = DateTime.Now;
             int completedCount = 0;
             Stopwatch watch = Stopwatch.StartNew();
-
-            // Use new progress bar for download operations
             ConsoleProgress.ShowOperationProgress(0, urls.Count, "Downloading lists");
-
             foreach (var url in urls)
             {
                 completedCount++;
-                //TraceLogger.Log($"Progress: [{completedCount} out of {urls.Count}] - Downloading list from: {url}");
                 var fileName = Path.GetFileName(url);
                 var filePath = Path.Combine(ListFolderLocation, fileName);
 
                 try
                 {
-                    // Use the new download progress reporting
                     await DownloadController.DownloadFileAsync(url, filePath, forceMode);
                 }
                 catch (Exception ex)
                 {
                     ProblemDuringUpdate = true;
                     TraceLogger.Log($"Failed to download {url}: {ex}", Enums.StatusSeverityType.Error);
-                    // Continue with other downloads rather than failing entire process
                 }
                 ConsoleProgress.ShowOperationProgress(completedCount, urls.Count, "Downloading lists");
             }
@@ -163,44 +156,57 @@ namespace HostlistDownloader.Modules.DownloadSystem
             if (!HasDownloadedUpdates)
             {
                 TraceLogger.Log("No updates were applied.");
+                CheckIntegrity(ListFolderLocation, urls.Count, CombinedListLocation, startTime);
                 return;
             }
-            CheckForOldHostLists(ListFolderLocation, startTime);
             IOManager.MergeFiles(ListFolderLocation, CombinedListLocation);
             IOManager.RemoveDuplicates(CombinedListLocation);
             IOManager.FormatHosts(CombinedListLocation);
+            CheckIntegrity(ListFolderLocation, urls.Count, CombinedListLocation, startTime);
         }
 
-        private static void CheckForOldHostLists(string ListFolderLocation, DateTime StartOfBlockList)
+        private static void CheckIntegrity(string ListFolderLocation, int urlCount, string CombinedListLocation, DateTime startTime)
         {
-            try
+            TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
+            var files = Directory.GetFiles(ListFolderLocation, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase));
+            if (files.Count() != urlCount)
             {
-                var files = Directory.GetFiles(ListFolderLocation);
-                foreach (var file in files)
+                TraceLogger.Log("URL and List file count mismatch! Clearing hostlist folder and restarting HostlistDownloader...",Enums.StatusSeverityType.Warning);
+                try
                 {
-                    if (file.Contains("combined-"))
+                    foreach (var file in Directory.GetFiles(ListFolderLocation))
                     {
-                        TraceLogger.Log("Combined list ignored from check.");
-                        return;
-                    }
-                    DateTime lastWriteTime = File.GetLastWriteTime(file);
-                    if (lastWriteTime < StartOfBlockList)
-                    {
-                        TraceLogger.Log($"Deleting {file} since it was not written to during download. (LastWriteTime is less than StartOfBlockListTime)");
                         File.Delete(file);
-                    }
-                    else
-                    {
-                        TraceLogger.Log($"List file {file} was updated successfully. Last write time: {lastWriteTime}");
+                        TraceLogger.Log($"Deleted {file} due to count mismatch.");
                     }
                 }
-                TraceLogger.Log("Check complete.");
+                catch(Exception ex)
+                {
+                    TraceLogger.Log($"Mismatch check failure. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                ProblemDuringUpdate = true;
-                TraceLogger.Log($"Error checking old host lists: {ex}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log("URL and file count OK.");
             }
+            TraceLogger.Log("Checking if combined list has been written to during update...");
+            if (new FileInfo(CombinedListLocation).Length > 0) 
+            {
+                TraceLogger.Log($"{CombinedListLocation} has valid file size.");
+                if (!ProblemDuringUpdate && HasDownloadedUpdates)
+                {
+                    DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
+                    if (lastWriteTime < startTime)
+                    {
+                        TraceLogger.Log($"{CombinedListLocation} hasn't been written to but DownloadManager has reported it downloaded updates! {ListFolderLocation} deletion recommended.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                    }
+                }
+                else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
+                {
+                    TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.");
+                }
+            }
+            TraceLogger.Log("Integrity check complete. No issues detected.");
         }
 
         private static List<string> ReadUrlsFromFile(string filePath)
@@ -231,7 +237,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             catch (Exception ex)
             {
                 ProblemDuringUpdate = true;
-                TraceLogger.Log($"Error reading URLs from {filePath}: {ex}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"Error reading URLs from {filePath}: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.InvalidConfigEntry);
                 return urls;
             }
         }
