@@ -44,3 +44,4 @@ Define your source URLs and user-defined domains in the INI files located within
 | [`hostfiles/formattype.ini`](#)| Tells HostlistDownloader what format the combined list should be. The valid settings are "hosts", "host", "domain", "iponly". |
 | [`hostfiles/blocklist/HLDcombined-blocklist.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs processed and merged locally. |
 | [`hostfiles/whitelist/HLDcombined-whitelist.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs processed and merged locally. |
+| [`hostfiles/combined/HLDcombined-list.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs, with blocklist URLs that are in the whitelist removed. (Good for Portmasters "Custom Filter File" that doesn't have a whitelist filter file option) |

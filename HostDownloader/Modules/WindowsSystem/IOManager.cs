@@ -30,18 +30,20 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public static readonly string HostfilesLocation = "hostfiles";
         public static readonly string BlockListFolderLocation = "hostfiles/blocklist";
         public static readonly string WhiteListFolderLocation = "hostfiles/whitelist";
+        public static readonly string CombinedListFolderLocation = "hostfiles/combined";
         public static readonly string IniBlockListFileLocation = "hostfiles/blocklist.ini";
         public static readonly string IniWhiteListFileLocation = "hostfiles/whitelist.ini";
         public static readonly string IniUserWebsiteBlockListFileLocation = "hostfiles/userwebsiteblocklist.ini";
         public static readonly string IniUserWebsiteWhiteListFileLocation = "hostfiles/userwebsitewhitelist.ini";
         public static readonly string CombinedBlockListFileLocation = "hostfiles/blocklist/HLDcombined-blocklist.txt";
         public static readonly string CombinedWhiteListFileLocation = "hostfiles/whitelist/HLDcombined-whitelist.txt";
+        public static readonly string CombinedListFileLocation = "hostfiles/combined/HLDcombined-list.txt";
         public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
 
         public static void CreateNecessaryDirectoriesAndFiles()
         {
-            string[] directories = [LogsLocation, HostfilesLocation, BlockListFolderLocation, WhiteListFolderLocation];
+            string[] directories = [LogsLocation, HostfilesLocation, BlockListFolderLocation, WhiteListFolderLocation, CombinedListFolderLocation];
             bool checkForCorruption = false;
             bool ShowHelp = false;
             foreach (string dir in directories)
@@ -60,7 +62,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                 }
             }
-            string[] files = [IniFormatTypeLocation, IniUserWebsiteBlockListFileLocation, IniUserWebsiteWhiteListFileLocation, CombinedBlockListFileLocation, CombinedWhiteListFileLocation, IniBlockListFileLocation, IniWhiteListFileLocation];
+            string[] files = [CombinedListFileLocation,IniFormatTypeLocation, IniUserWebsiteBlockListFileLocation, IniUserWebsiteWhiteListFileLocation, CombinedBlockListFileLocation, CombinedWhiteListFileLocation, IniBlockListFileLocation, IniWhiteListFileLocation];
             foreach (string file in files)
             {
                 if (!File.Exists(file))
@@ -207,7 +209,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"Error reading format type from {formatTypePath}: {ex}", Enums.StatusSeverityType.Error);
+                    TraceLogger.Log($"Error reading format type from {formatTypePath}: {ex}. Reverting to domain format.", Enums.StatusSeverityType.Error);
                 }
             }
 
@@ -228,6 +230,13 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 var trimmedLine = line.Trim();
 
+                // Remove comments (everything after #)
+                int commentIndex = trimmedLine.IndexOf('#');
+                if (commentIndex >= 0)
+                {
+                    trimmedLine = trimmedLine.Substring(0, commentIndex).Trim();
+                }
+
                 // Check if it's in host format: "IP domain"
                 if (Uri.CheckHostName(trimmedLine) == UriHostNameType.Unknown)
                 {
@@ -239,7 +248,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                         // Assume first part is IP address, rest is domain
                         var ipAddress = parts[0];
                         var hostName = string.Join(" ", parts.Skip(1)); // Join the remaining parts in case the domain has spaces
-                        // Apply format according to type
+
                         switch (formatType)
                         {
                             case "hosts":

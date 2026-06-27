@@ -35,12 +35,16 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log("Starting update...", Enums.StatusSeverityType.Information);
             var blockListIni = ReadConfigFile(IOManager.IniBlockListFileLocation);
             var whiteListIni = ReadConfigFile(IOManager.IniWhiteListFileLocation);
+            var userblockListIni = ReadConfigFile(IOManager.IniUserWebsiteBlockListFileLocation);
+            var userwhiteListIni = ReadConfigFile(IOManager.IniUserWebsiteWhiteListFileLocation);
 
             if (string.IsNullOrEmpty(blockListIni) && string.IsNullOrEmpty(whiteListIni))
             {
                 TraceLogger.Log("Blocklist and Whitelist INI are not configured.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationFileMissing);
                 return;
             }
+
+            bool hasUpdates = false;
 
             if (!string.IsNullOrEmpty(blockListIni))
             {
@@ -49,12 +53,22 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 DownloadLists(IOManager.IniBlockListFileLocation,
                     IOManager.BlockListFolderLocation,
                     IOManager.CombinedBlockListFileLocation, forceMode).GetAwaiter().GetResult();
-                MergeUserConfig(IOManager.IniUserWebsiteBlockListFileLocation,
-                    IOManager.CombinedBlockListFileLocation);
+                hasUpdates = true;
             }
             else
             {
                 TraceLogger.Log("Blocklist INI not configured. Ignoring");
+            }
+
+            if (!string.IsNullOrEmpty(userblockListIni))
+            {
+                TraceLogger.Log("User blocklist INI is configured. Merging user config...");
+                MergeUserConfig(IOManager.IniUserWebsiteBlockListFileLocation, IOManager.CombinedBlockListFileLocation);
+                hasUpdates = true;
+            }
+            else
+            {
+                TraceLogger.Log("User Blocklist INI not configured. Ignoring");
             }
 
             if (!string.IsNullOrEmpty(whiteListIni))
@@ -64,12 +78,27 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 DownloadLists(IOManager.IniWhiteListFileLocation,
                     IOManager.WhiteListFolderLocation,
                     IOManager.CombinedWhiteListFileLocation, forceMode).GetAwaiter().GetResult();
-                MergeUserConfig(IOManager.IniUserWebsiteWhiteListFileLocation,
-                    IOManager.CombinedWhiteListFileLocation);
+                hasUpdates = true;
             }
             else
             {
                 TraceLogger.Log("Whitelist INI not configured. Ignoring");
+            }
+
+            if (!string.IsNullOrEmpty(userwhiteListIni))
+            {
+                TraceLogger.Log("User Whitelist INI is configured. Merging user config...");
+                MergeUserConfig(IOManager.IniUserWebsiteWhiteListFileLocation, IOManager.CombinedWhiteListFileLocation);
+                hasUpdates = true;
+            }
+            else
+            {
+                TraceLogger.Log("User Whitelist INI not configured. Ignoring");
+            }
+
+            if (hasUpdates)
+            {
+                GenerateCombinedList();
             }
 
             TraceLogger.Log("Host lists update completed!");
@@ -103,9 +132,41 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     return;
                 }
 
-                var lines = File.ReadAllLinesAsync(IniUserListLocation).GetAwaiter().GetResult();
-                File.AppendAllLinesAsync(CombinedLocation, lines).GetAwaiter().GetResult();
-                TraceLogger.Log($"Merged user defined lists on {CombinedLocation}");
+                var existingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (File.Exists(CombinedLocation))
+                {
+                    var existingContent = File.ReadAllLines(CombinedLocation);
+                    foreach (var line in existingContent)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line) && !line.StartsWith("#"))
+                        {
+                            existingLines.Add(line.Trim());
+                        }
+                    }
+                }
+                var userLines = File.ReadAllLines(IniUserListLocation);
+                var filteredLines = new List<string>();
+
+                foreach (var line in userLines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+                        continue;
+                    if (!existingLines.Contains(trimmedLine))
+                    {
+                        filteredLines.Add(trimmedLine);
+                        existingLines.Add(trimmedLine); // Add to existing set for subsequent checks in this method
+                    }
+                }
+                if (filteredLines.Any())
+                {
+                    File.AppendAllLines(CombinedLocation, filteredLines);
+                    TraceLogger.Log($"Merged user defined lists on {CombinedLocation} (added {filteredLines.Count} unique entries)");
+                }
+                else
+                {
+                    TraceLogger.Log("No new unique entries to add to the combined list.");
+                }
             }
             catch (Exception ex)
             {
@@ -171,7 +232,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             var files = Directory.GetFiles(ListFolderLocation, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase));
             if (files.Count() != urlCount)
             {
-                TraceLogger.Log("URL and List file count mismatch! Clearing hostlist folder...",Enums.StatusSeverityType.Warning);
+                TraceLogger.Log("URL and List file count mismatch! Clearing hostlist folder...", Enums.StatusSeverityType.Warning);
                 TraceLogger.Log($"URL Count: {urlCount} | File Count: {files.Count()}", Enums.StatusSeverityType.Warning);
                 try
                 {
@@ -183,7 +244,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     IOManager.ClearTempFiles(ListFolderLocation);
                     TraceLogger.Log("URL and list file count is different. Hostlist folder has been cleared. Please run HostlistDownloader again. If that doesn't work, run it with the /force argument.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     TraceLogger.Log($"Mismatch check failure. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
                 }
@@ -193,7 +254,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 TraceLogger.Log("URL and file count OK.");
             }
             TraceLogger.Log("Checking if combined list has been written to during update...");
-            if (new FileInfo(CombinedListLocation).Length > 0) 
+            if (new FileInfo(CombinedListLocation).Length > 0)
             {
                 TraceLogger.Log($"{CombinedListLocation} has valid file size.");
                 if (!ProblemDuringUpdate && HasDownloadedUpdates)
@@ -210,6 +271,34 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 }
             }
             TraceLogger.Log("Integrity check complete. No issues detected.");
+        }
+
+        public static void GenerateCombinedList()
+        {
+            TraceLogger.Log("Generating combined list...");
+            try
+            {
+                var whiteList = new HashSet<string>(ReadLinesFromFile(IOManager.CombinedWhiteListFileLocation), StringComparer.OrdinalIgnoreCase);
+                var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocation);
+                var filteredLines = blockListLines.Where(line =>
+                !whiteList.Any(whiteItem => line.Contains(whiteItem, StringComparison.OrdinalIgnoreCase))).ToList();
+                File.WriteAllLines(IOManager.CombinedListFileLocation, filteredLines);
+                TraceLogger.Log($"Generated combined list to: {IOManager.CombinedListFileLocation} | Line count: {filteredLines.Count:N0}");
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Combined List Generation Failure: {ex}", Enums.StatusSeverityType.Error);
+            }
+        }
+
+        private static IEnumerable<string> ReadLinesFromFile(string filePath)
+        {
+            if (!File.Exists(filePath))
+                return [];
+
+            return File.ReadLines(filePath)
+                      .Select(line => line.Trim())
+                      .Where(line => !string.IsNullOrEmpty(line));
         }
 
         private static List<string> ReadUrlsFromFile(string filePath)
