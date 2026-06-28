@@ -17,11 +17,13 @@ HostlistDownloader streamlines hostlists by automatically fetching lists from re
 
 | Functions | Description |
 | :--- | :--- |
-| **Remote Fetching** | Downloads raw host files directly from URLs defined in configuration JSON settings. |
-| **Host File Update Check** | Checks for host file updates before downloading via eTags. |
+| **Remote Fetching** | Downloads raw host files directly from URLs defined in settings JSON file. |
+| **Supports automation** | HostlistDownloader runs via the configured settings JSON file, once run there is no user interaction needed. |
+| **Host File Update Check** | Checks for host file updates before downloading via eTags, ensuring that HostlistDownloader download files that have updates. |
+| **Multi-Threaded Downloads** | Customizable multi-threaded download to get and process hostfiles quicker. |
 | **Custom User Blocklists** | Combine your user defined blocklists with the ones that are downloaded. |
-| **Formatting** | Force a specific format on all the host files downloaded. (e.g. hosts (0.0.0.0 google.com), iponly, domain) |
-| **Filtering and Removal of Duplicates**   | Automatically strips empty lines, comments (`#`, `;`), and duplicates during consolidation. |
+| **Formatting** | Force a specific format on all the host files downloaded. (e.g. hosts (0.0.0.0 google.com), iponly, domain, dnsmasq, wildcard) |
+| **Filtering and Removal of Duplicates**   | Automatically strips out empty lines, comments (`#`, `;`), and duplicates during consolidation. |
 
 # How to configure
 
@@ -42,7 +44,7 @@ Define your source URLs and user-defined domains in the INI files located within
 | [`hostfiles/whitelist/HLDcombined-whitelist.txt`](#)     | **Output**: Consolidated list containing all whitelist URLs processed and merged locally. |
 | [`hostfiles/combined/HLDcombined-list.txt`](#)     | **Output**: Consolidated list containing all blocklist URLs, with blocklist entries that are in the whitelist removed. (Good for Portmasters "Custom Filter File" that doesn't have a whitelist filter file option) |
 
-### Example `config.json`
+### Example `settings.json`
 
 ```json
 {
@@ -59,3 +61,5 @@ Define your source URLs and user-defined domains in the INI files located within
   "logExpiryInDays": 7
 }
 ```
+
+"formattype" Accepted Values: domain, host, iponly, dnsmasq (output: address=/hostnamehere/0.0.0.0), wildcard (output: *.hostnamehere)

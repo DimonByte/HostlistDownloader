@@ -56,7 +56,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             {
                 TraceLogger.Log("Blocklist INI is configured. Updating blocklists...");
                 // Since we're using the ConfigReader now, we need to adapt how we handle blocklist files
-                DownloadLists(blockListIni,
+                ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
                     IOManager.CombinedBlockListFileLocation, forceMode).GetAwaiter().GetResult();
                 hasUpdates = true;
@@ -85,7 +85,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             {
                 TraceLogger.Log("Whitelist INI is configured. Updating whitelists...");
                 // Process multiple whitelist files
-                DownloadLists(whiteListIni,
+                ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
                     IOManager.CombinedWhiteListFileLocation, forceMode).GetAwaiter().GetResult();
                 hasUpdates = true;
@@ -156,7 +156,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
         }
 
-        private static async Task DownloadLists(string[] iniLocations, string ListFolderLocation, string CombinedListLocation, bool forceMode)
+        private static async Task ProcessDownloadLists(string[] iniLocations, string ListFolderLocation, string CombinedListLocation, bool forceMode)
         {
             TraceLogger.Log($"Starting download for INI files. ListFolderLocation: {ListFolderLocation} | CombinedListLocation: {CombinedListLocation}");
 
@@ -164,11 +164,6 @@ namespace HostlistDownloader.Modules.DownloadSystem
 
             foreach (var iniLocation in iniLocations)
             {
-                //if (!File.Exists(iniLocation))
-                //{
-                //    TraceLogger.Log($"List configuration file not found: {iniLocation}", Enums.StatusSeverityType.Error);
-                //    continue;
-                //}
                 var urls = ReadUrlsFromFile(iniLocation);
                 if (urls != null)
                 {

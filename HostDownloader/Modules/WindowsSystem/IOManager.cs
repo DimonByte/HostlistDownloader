@@ -312,6 +312,14 @@ namespace HostlistDownloader.Modules.WindowsSystem
                                     formattedLines.Add(ipAddress);
                                 }
                                 break;
+                            case "dnsmasq":
+                                // dnsmasq format: address=/domain/ip
+                                formattedLines.Add($"address=/{hostName}/0.0.0.0");
+                                break;
+                            case "wildcard":
+                                // Wildcard format
+                                formattedLines.Add($"*.{hostName}");
+                                break;
                             default:
                                 formattedLines.Add(hostName);
                                 break;
@@ -330,6 +338,17 @@ namespace HostlistDownloader.Modules.WindowsSystem
                                 break;
                             case "iponly":
                                 // For iponly format, there's no IP so we skip this line
+                                break;
+                            case "dnsmasq":
+                                // dnsmasq format: address=/domain/ip
+                                formattedLines.Add($"address=/{domain}/0.0.0.0");
+                                break;
+                            case "wildcard":
+                                // Wildcard format (as prefix)
+                                formattedLines.Add($"*.{domain}");
+                                break;
+                            case "domain":
+                                formattedLines.Add(domain);
                                 break;
                             default:
                                 formattedLines.Add(domain);
@@ -350,6 +369,17 @@ namespace HostlistDownloader.Modules.WindowsSystem
                             break;
                         case "iponly":
                             // For iponly, we don't have IP to work with
+                            break;
+                        case "dnsmasq":
+                            // dnsmasq format: address=/domain/ip
+                            formattedLines.Add($"address=/{domain}/0.0.0.0");
+                            break;
+                        case "ip":
+                            // For IP-only, we still don't have an IP to add
+                            break;
+                        case "wildcard":
+                            // Wildcard format (as prefix)
+                            formattedLines.Add($"*.{domain}");
                             break;
                         default:
                             // Default to domain-only format
