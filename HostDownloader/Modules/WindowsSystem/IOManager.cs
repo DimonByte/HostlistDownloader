@@ -36,8 +36,8 @@ namespace HostlistDownloader.Modules.WindowsSystem
         //public static readonly string IniWhiteListFileLocation = "hostfiles/whitelist.ini";
         //public static readonly string IniUserWebsiteBlockListFileLocation = "hostfiles/userwebsiteblocklist.ini";
         //public static readonly string IniUserWebsiteWhiteListFileLocation = "hostfiles/userwebsitewhitelist.ini";
-        public static readonly string CombinedBlockListFileLocation = "hostfiles/blocklist/HLDcombined-blocklist.txt";
-        public static readonly string CombinedWhiteListFileLocation = "hostfiles/whitelist/HLDcombined-whitelist.txt";
+        public static readonly string CombinedBlockListFileLocation = "hostfiles/combined/HLDcombined-blocklist.txt";
+        public static readonly string CombinedWhiteListFileLocation = "hostfiles/combined/HLDcombined-whitelist.txt";
         public static readonly string CombinedListFileLocation = "hostfiles/combined/HLDcombined-list.txt";
         //public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
