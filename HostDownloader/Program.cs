@@ -33,10 +33,7 @@ Stopwatch watch = Stopwatch.StartNew();
 Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
 IOManager.CreateNecessaryDirectoriesAndFiles();
 ConfigReader.Init(IOManager.SettingJsonFileLocation);
-if (IOManager.checkForCorruption)
-{
-    IOManager.CheckForInvalidConfig();
-}
+IOManager.CheckForInvalidConfig();
 if (!NetworkChecker.IsNetworkAvailable())
 {
     TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ErrorCodes.NetworkConnectionFailed);
@@ -63,7 +60,7 @@ foreach (string arg in args)
 
 TraceLogger.ClearExpiredLogs();
 
-HostListManager.UpdateLists(fresh); //Main Update Loop
+HostListManager.StartListProcessing(fresh); //Main Update Loop
 
 watch.Stop();
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)

@@ -42,7 +42,6 @@ namespace HostlistDownloader.Modules.WindowsSystem
         //public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
         public static readonly string SettingJsonFileLocation = "settings.json";
-        public static bool checkForCorruption = false;
 
         public static void CreateNecessaryDirectoriesAndFiles()
         {
@@ -84,19 +83,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
                         TraceLogger.Log($"Error creating file {file}: {ex}", Enums.StatusSeverityType.Error);
                     }
                 }
-                else
-                {
-                    checkForCorruption = true;
-                }
             }
             if (!File.Exists(IOManager.SettingJsonFileLocation))
             {
                 ShowHelp = true;
                 ConfigReader.CreateDefaultConfig(IOManager.SettingJsonFileLocation);
-            }
-            else
-            {
-                checkForCorruption = true;
             }
             if (ShowHelp)
             {
@@ -127,7 +118,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 var blocklists = ConfigReader.Instance.Blocklists;
                 var whitelists = ConfigReader.Instance.Whitelist;
 
-                TraceLogger.Log("Checking blocklist configuration for corruption.");
+                //TraceLogger.Log("Checking blocklist configuration for corruption.");
                 var validBlocklistUrls = new List<string>();
                 foreach (var url in blocklists)
                 {
@@ -142,7 +133,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                 }
 
-                TraceLogger.Log("Checking whitelist configuration for corruption.");
+                //TraceLogger.Log("Checking whitelist configuration for corruption.");
                 var validWhitelistUrls = new List<string>();
                 foreach (var url in whitelists)
                 {
@@ -161,7 +152,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 var userBlocklists = ConfigReader.Instance.UserWebsiteBlocklist;
                 var userWhitelists = ConfigReader.Instance.UserWebsiteWhitelist;
 
-                TraceLogger.Log("Checking user blocklist configuration for corruption.");
+                //TraceLogger.Log("Checking user blocklist configuration for corruption.");
                 var validUserBlocklistDomains = new List<string>();
                 foreach (var domain in userBlocklists)
                 {
@@ -177,7 +168,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                 }
 
-                TraceLogger.Log("Checking user whitelist configuration for corruption.");
+                //TraceLogger.Log("Checking user whitelist configuration for corruption.");
                 var validUserWhitelistDomains = new List<string>();
                 foreach (var domain in userWhitelists)
                 {
@@ -219,10 +210,13 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     TraceLogger.Log("Configuration file has been updated with only valid entries.", Enums.StatusSeverityType.Information);
                 }
 
-                TraceLogger.Log("Configuration corruption check completed.");
                 if (corruptionDetected)
                 {
                     TraceLogger.Log("Corruption was detected during startup and was removed from the affected configuration entries. Please review the logs for details.", Enums.StatusSeverityType.Warning);
+                }
+                else
+                {
+                    TraceLogger.Log("Configuration corruption check completed. No issues found.");
                 }
             }
             catch (Exception ex)

@@ -30,13 +30,14 @@ namespace HostlistDownloader.Modules.DownloadSystem
     {
         public static bool ProblemDuringUpdate;
         public static bool HasDownloadedUpdates;
+        private static bool hasUpdates = false;
 
         private static readonly Dictionary<string, HashSet<string>> _fileLineCache = [];
         private static readonly Lock _cacheLock = new();
 
-        public static void UpdateLists(bool forceMode)
+        public static void StartListProcessing(bool forceMode)
         {
-            TraceLogger.Log("Starting update...", Enums.StatusSeverityType.Information);
+            TraceLogger.Log("Starting list processing...", Enums.StatusSeverityType.Information);
 
             // Use ConfigReader to get configuration values instead of IOManager
             string[] blockListIni = [.. ConfigReader.Instance.Blocklists];
@@ -50,8 +51,6 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 return;
             }
 
-            bool hasUpdates = false;
-
             if (blockListIni.Length != 0)
             {
                 TraceLogger.Log("Blocklist INI is configured. Updating blocklists...");
@@ -59,7 +58,6 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
                     IOManager.CombinedBlockListFileLocation, forceMode).GetAwaiter().GetResult();
-                hasUpdates = true;
             }
             else
             {
@@ -72,9 +70,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 // Process multiple user-blocklist files
                 foreach (string urlEntry in userblockListIni)
                 {
-                    MergeUserConfig(urlEntry, IOManager.CombinedBlockListFileLocation);
+                    MergeUserDefinedDomains(urlEntry, IOManager.CombinedBlockListFileLocation);
                 }
-                hasUpdates = true;
             }
             else
             {
@@ -88,7 +85,6 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
                     IOManager.CombinedWhiteListFileLocation, forceMode).GetAwaiter().GetResult();
-                hasUpdates = true;
             }
             else
             {
@@ -101,9 +97,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 // Process multiple user-whitelist files
                 foreach (string urlEntry in userwhiteListIni)
                 {
-                    MergeUserConfig(urlEntry, IOManager.CombinedBlockListFileLocation);
+                    MergeUserDefinedDomains(urlEntry, IOManager.CombinedWhiteListFileLocation);
                 }
-                hasUpdates = true;
             }
             else
             {
@@ -118,7 +113,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log("Host lists update completed!");
         }
 
-        private static void MergeUserConfig(string IniUserListLocation, string CombinedLocation)
+        private static void MergeUserDefinedDomains(string IniUserListLocation, string CombinedLocation)
         {
             TraceLogger.Log("Attempting to merge user defined website lists...");
             try
@@ -143,6 +138,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 {
                     File.AppendAllLines(CombinedLocation, filteredLines);
                     TraceLogger.Log($"Merged user defined lists on {CombinedLocation} (added {filteredLines.Count} unique entries)");
+                    hasUpdates = true;
                 }
                 else
                 {
@@ -204,7 +200,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                         TraceLogger.Log($"Added {fileName} to queue.");
                         ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloading {Path.GetFileName(url)}");
                         await DownloadController.DownloadFileAsync(url, filePath, forceMode);
-                        TraceLogger.Log($"{fileName} task complete.");
+                        //TraceLogger.Log($"{fileName} task complete.");
                     }
                     catch (Exception ex)
                     {
@@ -213,8 +209,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     }
                     finally
                     {
-                        TraceLogger.Log($"{fileName} task released.");
                         semaphore.Release();
+                        TraceLogger.Log($"{fileName} download task completed and released.");
                     }
                 }));
             }
@@ -224,16 +220,26 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds} seconds. Checking if all hostlists have been updated recently");
             if (!HasDownloadedUpdates)
             {
-                TraceLogger.Log("No updates were applied.");
+                TraceLogger.Log("No need to compile lists since no available updates were downloaded. Checking integrity of existing lists...");
                 CheckIntegrity(ListFolderLocation, allUrls.Count, CombinedListLocation, startTime);
                 return;
             }
+            else
+            {
+                hasUpdates = true; // Set the flag to indicate that updates were downloaded, this will tell the GenerateCombinedList method to run later
+            }
 
             // Use IOManager methods but with the right folder path
-            IOManager.MergeFiles(ListFolderLocation, CombinedListLocation);
-            IOManager.RemoveDuplicates(CombinedListLocation);
-            IOManager.FormatHosts(CombinedListLocation);
-            CheckIntegrity(ListFolderLocation, allUrls.Count, CombinedListLocation, startTime);
+            CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, startTime);
+        }
+
+        private static void CompileList(string listFolderLocation, string combinedListLocation, int urlCount, DateTime startTime)
+        {
+            TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
+            IOManager.MergeFiles(listFolderLocation, combinedListLocation);
+            IOManager.RemoveDuplicates(combinedListLocation);
+            IOManager.FormatHosts(combinedListLocation);
+            CheckIntegrity(listFolderLocation, urlCount, combinedListLocation, startTime);
         }
 
         private static void CheckIntegrity(string ListFolderLocation, int urlCount, string CombinedListLocation, DateTime startTime)
@@ -280,7 +286,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
 
         public static void GenerateCombinedList()
         {
-            TraceLogger.Log("Generating combined list...");
+            TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocation)} list...");
             try
             {
                 // Use cached version for the white list to avoid repeated file reads
@@ -331,7 +337,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             try
             {
                 if (string.IsNullOrWhiteSpace(filePath) || filePath.StartsWith('#'))
-                    return null;
+                    return null!;
 
                 urls.Add(filePath.Trim());
 
