@@ -43,10 +43,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
         [property: JsonPropertyName("blocklists")] string[]? Blocklists = null,
         [property: JsonPropertyName("whitelist")] string[]? Whitelist = null,
         [property: JsonPropertyName("formattype")] string? Formattype = null,
-        [property: JsonPropertyName("userwebsiteblocklist")] string[]? UserWebsiteBlocklist = null,
-        [property: JsonPropertyName("userwebsitewhitelist")] string[]? UserWebsiteWhitelist = null,
-        [property: JsonPropertyName("maxdownloadthreads")] int? MaxDownloadThreads = null,
-        [property: JsonPropertyName("logexpiryindays")] int? LogExpiryInDays = null)
+        [property: JsonPropertyName("userWebsiteBlocklist")] string[]? UserWebsiteBlocklist = null,
+        [property: JsonPropertyName("userWebsiteWhitelist")] string[]? UserWebsiteWhitelist = null,
+        [property: JsonPropertyName("maxDownloadThreads")] int? MaxDownloadThreads = null,
+        [property: JsonPropertyName("logExpiryInDays")] int? LogExpiryInDays = null)
     {
         private Settings() : this(null) { } // prevent manual construction
     }

@@ -23,6 +23,7 @@
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace HostlistDownloader.Modules.DownloadSystem
 {
@@ -53,7 +54,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
 
             if (blockListIni.Length != 0)
             {
-                TraceLogger.Log("Blocklist INI is configured. Updating blocklists...");
+                TraceLogger.Log("Blocklist is configured. Updating blocklists...");
                 // Since we're using the ConfigReader now, we need to adapt how we handle blocklist files
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
@@ -61,12 +62,12 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
             else
             {
-                TraceLogger.Log("Blocklist INI not configured. Ignoring");
+                TraceLogger.Log("Blocklist not configured. Ignoring");
             }
 
             if (userblockListIni.Length != 0)
             {
-                TraceLogger.Log("User blocklist INI is configured. Merging user config...");
+                TraceLogger.Log("User blocklist is configured. Merging user config...");
                 // Process multiple user-blocklist files
                 foreach (string urlEntry in userblockListIni)
                 {
@@ -75,12 +76,12 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
             else
             {
-                TraceLogger.Log("User Blocklist INI not configured. Ignoring");
+                TraceLogger.Log("User Blocklist not configured. Ignoring");
             }
 
             if (whiteListIni.Length != 0)
             {
-                TraceLogger.Log("Whitelist INI is configured. Updating whitelists...");
+                TraceLogger.Log("Whitelist is configured. Updating whitelists...");
                 // Process multiple whitelist files
                 ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
@@ -88,12 +89,12 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
             else
             {
-                TraceLogger.Log("Whitelist INI not configured. Ignoring");
+                TraceLogger.Log("Whitelist not configured. Ignoring");
             }
 
             if (userwhiteListIni.Length != 0)
             {
-                TraceLogger.Log("User Whitelist INI is configured. Merging user config...");
+                TraceLogger.Log("User Whitelist is configured. Merging user config...");
                 // Process multiple user-whitelist files
                 foreach (string urlEntry in userwhiteListIni)
                 {
@@ -102,7 +103,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
             else
             {
-                TraceLogger.Log("User Whitelist INI not configured. Ignoring");
+                TraceLogger.Log("User Whitelist not configured. Ignoring");
             }
 
             if (hasUpdates)
@@ -113,7 +114,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log("Host lists update completed!");
         }
 
-        private static void MergeUserDefinedDomains(string IniUserListLocation, string CombinedLocation)
+        private static void MergeUserDefinedDomains(string urlEntryItem, string CombinedLocation)
         {
             TraceLogger.Log("Attempting to merge user defined website lists...");
             try
@@ -123,20 +124,29 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 var existingLines = ReadLinesFromFileCached(CombinedLocation);
                 var filteredLines = new List<string>();
 
-                var trimmedLine = IniUserListLocation.Trim();
-                if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith('#'))
+                var trimmedURLLine = urlEntryItem.Trim();
+                if (string.IsNullOrWhiteSpace(trimmedURLLine) || trimmedURLLine.StartsWith('#'))
                 {
                     TraceLogger.Log($"Null User URL. {CombinedLocation}. Ignoring.", Enums.StatusSeverityType.Warning);
                 }
-                if (!existingLines.Contains(trimmedLine))
+                //Check if the trimmed line starts or ends with a * to allow for wildcard entries, if so, we will not check for uniqueness since it is a wildcard entry
+                if (trimmedURLLine.StartsWith('*') || trimmedURLLine.EndsWith('*'))
                 {
-                    filteredLines.Add(trimmedLine);
-                    existingLines.Add(trimmedLine); // Add to existing set for subsequent checks in this method
+                    if (!existingLines.Contains(trimmedURLLine))
+                    {
+                        filteredLines.Add(trimmedURLLine);
+                        existingLines.Add(trimmedURLLine); // Add to existing set for subsequent checks in this method
+                    }
                 }
+                else
+                {
+                    filteredLines.Add(trimmedURLLine);
+                }
+                //If not check for exact match on the line. So contain wont work here.
 
                 if (filteredLines.Count != 0)
                 {
-                    File.AppendAllLines(CombinedLocation, filteredLines);
+                    File.WriteAllLines(CombinedLocation, filteredLines);
                     TraceLogger.Log($"Merged user defined lists on {CombinedLocation} (added {filteredLines.Count} unique entries)");
                     hasUpdates = true;
                 }
@@ -257,7 +267,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"Mismatch check failure. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                    TraceLogger.Log($"Integrity check failure (URL and File Count Mismatch): Mismatch check failure. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
                 }
             }
             else
@@ -273,7 +283,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
                     if (lastWriteTime < startTime)
                     {
-                        TraceLogger.Log($"{CombinedListLocation} hasn't been written to but DownloadManager has reported it downloaded updates! {ListFolderLocation} cleanup recommended (run HostlistDownloader with the /fresh argument).", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                        TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.\n{ListFolderLocation} cleanup recommended (run HostlistDownloader with the /fresh argument)", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
                     }
                 }
                 else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
@@ -290,10 +300,26 @@ namespace HostlistDownloader.Modules.DownloadSystem
             try
             {
                 // Use cached version for the white list to avoid repeated file reads
+                //TraceLogger.Log($"Reading white list from: {IOManager.CombinedWhiteListFileLocation}");
                 var whiteList = ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocation);
+                //TraceLogger.Log($"White list count: {whiteList.Count:N0}");
+                //TraceLogger.Log($"Reading block list from: {IOManager.CombinedBlockListFileLocation}");
                 var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocation);
+                //TraceLogger.Log($"Block list count: {blockListLines.Count():N0}");
                 var filteredLines = blockListLines.Where(line =>
-                !whiteList.Any(whiteItem => line.Contains(whiteItem, StringComparison.OrdinalIgnoreCase))).ToList();
+                    !whiteList.Any(whiteItem =>
+                    {
+                        // 1. If it contains a wildcard, use Regex
+                        if (whiteItem.Contains('*'))
+                        {
+                            // Convert * to .* and escape other regex characters (like dots)
+                            string pattern = "^" + Regex.Escape(whiteItem).Replace("\\*", ".*") + "$";
+                            return Regex.IsMatch(line, pattern, RegexOptions.IgnoreCase);
+                        }
+                        // 2. Otherwise, perform an exact line match
+                        return line.Equals(whiteItem, StringComparison.OrdinalIgnoreCase);
+                    })
+                ).ToList();
                 File.WriteAllLines(IOManager.CombinedListFileLocation, filteredLines);
                 TraceLogger.Log($"Generated combined list to: {IOManager.CombinedListFileLocation} | Line count: {filteredLines.Count:N0}");
             }

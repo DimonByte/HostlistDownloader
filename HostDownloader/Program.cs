@@ -27,8 +27,8 @@ using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Reflection;
 
-Console.WriteLine($"--HostlistDownloader-- ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
-Console.WriteLine("Arguments: /fresh (/fr) < ignores etags - forces a redownload of all hostlists.");
+Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
+Console.WriteLine("Arguments: /fresh (/fr) < clears all working directories and forces a redownload of all hostlists.");
 Stopwatch watch = Stopwatch.StartNew();
 Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
 IOManager.CreateNecessaryDirectoriesAndFiles();
@@ -65,20 +65,20 @@ HostListManager.StartListProcessing(fresh); //Main Update Loop
 watch.Stop();
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"(UPDATED) Hostfiles updated successfully in {watch.Elapsed.TotalSeconds} seconds.");
+    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully in {watch.Elapsed.TotalSeconds} seconds.");
 }
 else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"(UPDATED WITH ISSUES) Some hostfiles have updated successfully in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
+    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
     Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
 }
 else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"(UP TO DATE) Hostfiles are already up to date! (time taken: {watch.Elapsed.TotalSeconds} seconds.)");
+    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (time taken: {watch.Elapsed.TotalSeconds} seconds.)");
 }
 else //Problem and no downloads
 {
-    TraceLogger.Log("(PROBLEM) A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
+    TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
 Console.BackgroundColor = ConsoleColor.Black;

@@ -92,7 +92,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             if (ShowHelp)
             {
                 Console.WriteLine("[!] Configuration files and folders have been created in the directory where this program is stored. (settings.json)\nPlease refer to the documentation on the main GitHub page of HostlistDownloader to configure. Once configured, run HostlistDownloader again. HostlistDownloader will now exit.");
-                Environment.Exit(0);
+                Environment.Exit(ErrorCodes.GeneralError);
             }
         }
 
@@ -173,7 +173,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 foreach (var domain in userWhitelists)
                 {
                     // Validate that this is a valid domain name
-                    if (Uri.IsWellFormedUriString(domain, UriKind.Absolute))
+                    if (Uri.IsWellFormedUriString(domain, UriKind.RelativeOrAbsolute))
                     {
                         validUserWhitelistDomains.Add(domain);
                     }
