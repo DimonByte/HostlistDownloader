@@ -10,8 +10,8 @@
     <Description>A basic utility that downloads multiple host files from remote URLs, removes empty lines and comments, and consolidates them into a single processed file for use with ad filtering services. </Description>
     <PackageProjectUrl>https://github.com/DimonByte/HostlistDownloader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DimonByte/HostlistDownloader</RepositoryUrl>
-    <FileVersion>1.4.2</FileVersion>
-    <AssemblyVersion>1.4.2</AssemblyVersion>
+    <FileVersion>1.4.3</FileVersion>
+    <AssemblyVersion>1.4.3</AssemblyVersion>
   </PropertyGroup>
 
 </Project>

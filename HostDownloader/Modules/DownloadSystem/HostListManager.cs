@@ -69,10 +69,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             {
                 TraceLogger.Log("User blocklist is configured. Merging user config...");
                 // Process multiple user-blocklist files
-                foreach (string urlEntry in userblockListIni)
-                {
-                    MergeUserDefinedDomains(urlEntry, IOManager.CombinedBlockListFileLocation);
-                }
+                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocation, isBlocklist: true);
             }
             else
             {
@@ -96,10 +93,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             {
                 TraceLogger.Log("User Whitelist is configured. Merging user config...");
                 // Process multiple user-whitelist files
-                foreach (string urlEntry in userwhiteListIni)
-                {
-                    MergeUserDefinedDomains(urlEntry, IOManager.CombinedWhiteListFileLocation);
-                }
+                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocation, isBlocklist: false);
             }
             else
             {
@@ -114,33 +108,49 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log("Host lists update completed!");
         }
 
-        private static void MergeUserDefinedDomains(string urlEntryItem, string CombinedLocation)
+        private static void MergeUserDefinedDomains(string CombinedLocation, bool isBlocklist)
         {
-            TraceLogger.Log("Attempting to merge user defined website lists...");
+            TraceLogger.Log($"Attempting to merge user defined website lists for {CombinedLocation}...");
             try
             {
-
                 // Get existing lines from combined list for uniqueness check
-                var existingLines = ReadLinesFromFileCached(CombinedLocation);
-                var filteredLines = new List<string>();
+                //var existingLines = ReadLinesFromFileCached(CombinedLocation);
+                IReadOnlyList<string> existingLines;
 
-                var trimmedURLLine = urlEntryItem.Trim();
-                if (string.IsNullOrWhiteSpace(trimmedURLLine) || trimmedURLLine.StartsWith('#'))
+                if (isBlocklist)
                 {
-                    TraceLogger.Log($"Null User URL. {CombinedLocation}. Ignoring.", Enums.StatusSeverityType.Warning);
-                }
-                //Check if the trimmed line starts or ends with a * to allow for wildcard entries, if so, we will not check for uniqueness since it is a wildcard entry
-                if (trimmedURLLine.StartsWith('*') || trimmedURLLine.EndsWith('*'))
-                {
-                    if (!existingLines.Contains(trimmedURLLine))
-                    {
-                        filteredLines.Add(trimmedURLLine);
-                        existingLines.Add(trimmedURLLine); // Add to existing set for subsequent checks in this method
-                    }
+                    existingLines = ConfigReader.Instance.UserWebsiteBlocklist;
                 }
                 else
                 {
-                    filteredLines.Add(trimmedURLLine);
+                    existingLines = ConfigReader.Instance.UserWebsiteWhitelist;
+                }
+                TraceLogger.Log($"Existing lines count in user defined list: {existingLines.Count:N0}");
+
+                var filteredLines = new List<string>();
+                string[] trimmedURLLines = new string[existingLines.Count];
+
+                for (int i = 0; i < existingLines.Count; i++)
+                {
+                    trimmedURLLines[i] = existingLines.ElementAt(i).Trim();
+                    if (string.IsNullOrWhiteSpace(trimmedURLLines[i]) || trimmedURLLines[i].StartsWith('#'))
+                    {
+                        TraceLogger.Log($"Null User URL. {CombinedLocation}. Ignoring.", Enums.StatusSeverityType.Warning);
+                        return;
+                    }
+                    //Check if the trimmed line starts or ends with a * to allow for wildcard entries, if so, we will not check for uniqueness since it is a wildcard entry
+                    if (trimmedURLLines[i].StartsWith('*') || trimmedURLLines[i].EndsWith('*'))
+                    {
+                        if (!existingLines.Contains(trimmedURLLines[i]))
+                        {
+                            filteredLines.Add(trimmedURLLines[i]);
+                        }
+                    }
+                    else
+                    {
+                        filteredLines.Add(trimmedURLLines[i]);
+                    }
+                    //TraceLogger.Log($"User defined list entry: {trimmedURLLines[i]}");
                 }
                 //If not check for exact match on the line. So contain wont work here.
 
