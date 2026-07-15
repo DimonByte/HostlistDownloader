@@ -11,7 +11,7 @@
     <PackageProjectUrl>https://github.com/DimonByte/HostlistDownloader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DimonByte/HostlistDownloader</RepositoryUrl>
     <FileVersion>1.4.3</FileVersion>
-    <AssemblyVersion>1.4.3</AssemblyVersion>
+    <AssemblyVersion>1.4.4</AssemblyVersion>
   </PropertyGroup>
 
 </Project>

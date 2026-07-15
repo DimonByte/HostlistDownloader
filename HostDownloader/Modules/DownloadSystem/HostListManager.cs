@@ -219,8 +219,18 @@ namespace HostlistDownloader.Modules.DownloadSystem
                         await semaphore.WaitAsync(); // Wait for available slot
                         TraceLogger.Log($"Added {fileName} to queue.");
                         ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloading {Path.GetFileName(url)}");
-                        await DownloadController.DownloadFileAsync(url, filePath, forceMode);
+                        var downloadSuccess = await DownloadController.DownloadFileAsync(url, filePath, forceMode);
                         //TraceLogger.Log($"{fileName} task complete.");
+                        //Check if DownloadFileAsync returned false, if so set ProblemDuringUpdate to true and log a warning
+                        if (!downloadSuccess)
+                        {
+                            ProblemDuringUpdate = true;
+                            TraceLogger.Log($"Download operation has thrown an exception. Something has gone wrong with {url}. Check logs for more details.", Enums.StatusSeverityType.Error);
+                        }
+                        else
+                        {
+                            TraceLogger.Log($"{fileName} downloaded successfully.");
+                        }
                     }
                     catch (Exception ex)
                     {
