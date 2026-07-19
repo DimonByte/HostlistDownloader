@@ -218,8 +218,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     {
                         await semaphore.WaitAsync(); // Wait for available slot
                         TraceLogger.Log($"Added {fileName} to queue.");
-                        ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloading {Path.GetFileName(url)}");
                         var downloadSuccess = await DownloadController.DownloadFileAsync(url, filePath, forceMode);
+                        ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloaded {Path.GetFileName(url)}");
                         //TraceLogger.Log($"{fileName} task complete.");
                         //Check if DownloadFileAsync returned false, if so set ProblemDuringUpdate to true and log a warning
                         if (!downloadSuccess)

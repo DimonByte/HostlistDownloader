@@ -28,7 +28,7 @@ using System.Diagnostics;
 using System.Reflection;
 
 Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
-Console.WriteLine("Arguments: /fresh (/fr) < clears all working directories and forces a redownload of all hostlists.");
+Console.WriteLine("Arguments: /fresh (/fr) < clears all downloaded hostfile directories and forces a redownload of all hostlists. [Does not delete settings]");
 Stopwatch watch = Stopwatch.StartNew();
 Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
 IOManager.CreateNecessaryDirectoriesAndFiles();

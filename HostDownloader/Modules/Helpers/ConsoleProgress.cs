@@ -24,20 +24,6 @@ namespace HostlistDownloader.Modules.Helpers
 {
     public static class ConsoleProgress
     {
-        public static void ShowDownloadProgress(long downloadedBytes, long totalBytes, string fileName)
-        {
-            if (totalBytes > 0)
-            {
-                int percentage = (int)((downloadedBytes * 100) / totalBytes);
-                int progressWidth = 50;
-                int progressBlocks = (percentage * progressWidth) / 100;
-
-                string progressBar = new string('█', progressBlocks) + new string('░', progressWidth - progressBlocks);
-
-                Console.SetCursorPosition(0, Console.CursorTop);
-                Console.Write($"[{progressBar}] {percentage}% - {fileName}\n");
-            }
-        }
 
         public static void ShowOperationProgress(int current, int total, string operationName)
         {
