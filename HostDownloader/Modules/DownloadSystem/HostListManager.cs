@@ -36,7 +36,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
         private static readonly Dictionary<string, HashSet<string>> _fileLineCache = [];
         private static readonly Lock _cacheLock = new();
 
-        public static void StartListProcessing(bool forceMode)
+        public static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
         {
             TraceLogger.Log("Starting list processing...", Enums.StatusSeverityType.Information);
 
@@ -58,7 +58,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 // Since we're using the ConfigReader now, we need to adapt how we handle blocklist files
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
-                    IOManager.CombinedBlockListFileLocation, forceMode).GetAwaiter().GetResult();
+                    IOManager.CombinedBlockListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -82,7 +82,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 // Process multiple whitelist files
                 ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
-                    IOManager.CombinedWhiteListFileLocation, forceMode).GetAwaiter().GetResult();
+                    IOManager.CombinedWhiteListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -172,7 +172,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
             }
         }
 
-        private static async Task ProcessDownloadLists(string[] iniLocations, string ListFolderLocation, string CombinedListLocation, bool forceMode)
+        private static async Task ProcessDownloadLists(string[] iniLocations, string ListFolderLocation, string CombinedListLocation, bool forceMode, CancellationToken cancellationToken = default, bool isRetryAttempt = false)
         {
             TraceLogger.Log($"Starting download for INI files. ListFolderLocation: {ListFolderLocation} | CombinedListLocation: {CombinedListLocation}");
 
@@ -214,11 +214,13 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 //TraceLogger.Log($"Adding {fileName} download to task queue...");
                 tasks.Add(Task.Run(async () =>
                 {
+                    bool acquired = false;
                     try
                     {
-                        await semaphore.WaitAsync(); // Wait for available slot
+                        await semaphore.WaitAsync(cancellationToken); // Wait for available slot
+                        acquired = true;
                         TraceLogger.Log($"Added {fileName} to queue.");
-                        var downloadSuccess = await DownloadController.DownloadFileAsync(url, filePath, forceMode);
+                        var downloadSuccess = await DownloadController.DownloadFileAsync(url, filePath, forceMode, cancellationToken);
                         ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloaded {Path.GetFileName(url)}");
                         //TraceLogger.Log($"{fileName} task complete.");
                         //Check if DownloadFileAsync returned false, if so set ProblemDuringUpdate to true and log a warning
@@ -232,6 +234,10 @@ namespace HostlistDownloader.Modules.DownloadSystem
                             TraceLogger.Log($"{fileName} downloaded successfully.");
                         }
                     }
+                    catch (OperationCanceledException)
+                    {
+                        TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
+                    }
                     catch (Exception ex)
                     {
                         ProblemDuringUpdate = true;
@@ -239,61 +245,77 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     }
                     finally
                     {
-                        semaphore.Release();
-                        TraceLogger.Log($"{fileName} download task completed and released.");
+                        if (acquired)
+                        {
+                            semaphore.Release();
+                            TraceLogger.Log($"{fileName} download task completed and released.");
+                        }
                     }
                 }));
             }
             await Task.WhenAll(tasks);
 
             watch.Stop();
+            if (cancellationToken.IsCancellationRequested)
+            {
+                TraceLogger.Log("Download cancelled by user before completion.", Enums.StatusSeverityType.Warning);
+                return;
+            }
+
             TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds} seconds. Checking if all hostlists have been updated recently");
+            bool integrityOk;
             if (!HasDownloadedUpdates)
             {
                 TraceLogger.Log("No need to compile lists since no available updates were downloaded. Checking integrity of existing lists...");
-                CheckIntegrity(ListFolderLocation, allUrls.Count, CombinedListLocation, startTime);
-                return;
+                integrityOk = CheckIntegrity(ListFolderLocation, allUrls.Count, CombinedListLocation, startTime);
             }
             else
             {
                 hasUpdates = true; // Set the flag to indicate that updates were downloaded, this will tell the GenerateCombinedList method to run later
+                // Use IOManager methods but with the right folder path
+                integrityOk = CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, startTime);
             }
 
-            // Use IOManager methods but with the right folder path
-            CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, startTime);
+            if (integrityOk)
+                return;
+
+            if (isRetryAttempt)
+            {
+                TraceLogger.Log($"Integrity check failed again after an automatic retry. Giving up on {CombinedListLocation}. Please run HostlistDownloader again, or with the /fresh argument if the problem persists.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                return;
+            }
+
+            TraceLogger.Log("Attempting automatic recovery: clearing this list's folder and re-downloading everything once...", Enums.StatusSeverityType.Warning);
+            IOManager.ClearTempFiles(ListFolderLocation);
+            await ProcessDownloadLists(iniLocations, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
         }
 
-        private static void CompileList(string listFolderLocation, string combinedListLocation, int urlCount, DateTime startTime)
+        private static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, DateTime startTime)
         {
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
             IOManager.RemoveDuplicates(combinedListLocation);
             IOManager.FormatHosts(combinedListLocation);
-            CheckIntegrity(listFolderLocation, urlCount, combinedListLocation, startTime);
+            return CheckIntegrity(listFolderLocation, urlCount, combinedListLocation, startTime);
         }
 
-        private static void CheckIntegrity(string ListFolderLocation, int urlCount, string CombinedListLocation, DateTime startTime)
+        /// <summary>
+        /// Verifies that the number of downloaded files matches the number of configured URLs, and that the
+        /// combined list was actually written when updates were reported. Returns false on mismatch instead of
+        /// exiting immediately, so the caller can attempt one automatic recovery before treating it as fatal.
+        /// </summary>
+        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, string CombinedListLocation, DateTime startTime)
         {
             TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
-            var files = Directory.GetFiles(ListFolderLocation, ".").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase));
-            if (files.Count() != urlCount)
+            var files = Directory.GetFiles(ListFolderLocation, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase));
+            int fileCount = files.Count();
+            if (fileCount != urlCount)
             {
-                TraceLogger.Log("URL and List file count mismatch! Clearing hostlist folder...", Enums.StatusSeverityType.Warning);
-                TraceLogger.Log($"URL Count: {urlCount} | File Count: {files.Count()}", Enums.StatusSeverityType.Warning);
-                try
-                {
-                    IOManager.ClearTempFiles(ListFolderLocation);
-                    TraceLogger.Log("URL and list file count is different. Hostlist folder has been cleared. Please run HostlistDownloader again. If that doesn't work, run it with the /fresh argument.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
-                }
-                catch (Exception ex)
-                {
-                    TraceLogger.Log($"Integrity check failure (URL and File Count Mismatch): Mismatch check failure. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
-                }
+                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} | File Count: {fileCount}", Enums.StatusSeverityType.Error);
+                return false;
             }
-            else
-            {
-                TraceLogger.Log("URL and file count OK.");
-            }
+            TraceLogger.Log("URL and file count OK.");
+
             TraceLogger.Log("Checking if combined list has been written to during update...");
             if (new FileInfo(CombinedListLocation).Length > 0)
             {
@@ -303,7 +325,8 @@ namespace HostlistDownloader.Modules.DownloadSystem
                     DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
                     if (lastWriteTime < startTime)
                     {
-                        TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.\n{ListFolderLocation} cleanup recommended (run HostlistDownloader with the /fresh argument)", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                        TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.", Enums.StatusSeverityType.Error);
+                        return false;
                     }
                 }
                 else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
@@ -312,6 +335,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 }
             }
             TraceLogger.Log("Integrity check complete. No issues detected.");
+            return true;
         }
 
         public static void GenerateCombinedList()

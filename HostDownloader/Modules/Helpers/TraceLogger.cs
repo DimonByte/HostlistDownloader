@@ -30,6 +30,11 @@ namespace HostlistDownloader.Modules.Helpers
 {
     public static class TraceLogger
     {
+        /// <summary>
+        /// When true, suppresses Console output (log file writing is unaffected). Set via the /quiet argument.
+        /// </summary>
+        public static bool QuietMode = false;
+
         private static readonly Lock _lock = new();
         private static readonly string _logDirectory = IOManager.LogsLocation;
         private static string _currentDate = DateTime.Now.ToString("dd-MM-yyyy");
@@ -53,7 +58,16 @@ namespace HostlistDownloader.Modules.Helpers
                     if (!Directory.Exists(_logDirectory))
                         return;
                     var logFiles = Directory.GetFiles(_logDirectory, "*.log");
-                    DateTime expiryDate = DateTime.Now.AddDays(-7);
+                    int expiryDays = 7;
+                    try
+                    {
+                        expiryDays = ConfigReader.Instance.LogExpiryInDays;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // ConfigReader not initialised yet (e.g. very first run before settings.json exists) - use the 7 day default.
+                    }
+                    DateTime expiryDate = DateTime.Now.AddDays(-expiryDays);
                     foreach (var logFile in logFiles)
                     {
                         var fileInfo = new FileInfo(logFile);
@@ -103,39 +117,44 @@ namespace HostlistDownloader.Modules.Helpers
                 Debug.WriteLine($"Failed to prepare log entry: {ex}");
             }
 
-            // Apply color coding based on severity
-            ConsoleColor originalForeground = Console.ForegroundColor;
-            ConsoleColor originalBackground = Console.BackgroundColor;
-
-            try
+            // Apply color coding based on severity. Errors, warnings and fatal messages are always shown
+            // even in QuietMode, since quiet mode is meant to suppress routine noise, not important issues.
+            bool suppressConsole = QuietMode && severity is StatusSeverityType.Information or StatusSeverityType.Debug;
+            if (!suppressConsole)
             {
-                switch (severity)
+                ConsoleColor originalForeground = Console.ForegroundColor;
+                ConsoleColor originalBackground = Console.BackgroundColor;
+
+                try
                 {
-                    case StatusSeverityType.Information:
-                        Console.ForegroundColor = ConsoleColor.White;
-                        break;
-                    case StatusSeverityType.Warning:
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        break;
-                    case StatusSeverityType.Error:
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        break;
-                    case StatusSeverityType.Fatal:
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.BackgroundColor = ConsoleColor.Red;
-                        break;
-                    default:
-                        Console.ForegroundColor = ConsoleColor.Gray;
-                        break;
-                }
+                    switch (severity)
+                    {
+                        case StatusSeverityType.Information:
+                            Console.ForegroundColor = ConsoleColor.White;
+                            break;
+                        case StatusSeverityType.Warning:
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            break;
+                        case StatusSeverityType.Error:
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            break;
+                        case StatusSeverityType.Fatal:
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.BackgroundColor = ConsoleColor.Red;
+                            break;
+                        default:
+                            Console.ForegroundColor = ConsoleColor.Gray;
+                            break;
+                    }
 
-                Console.WriteLine(logEntry);
-            }
-            finally
-            {
-                // Reset console colors to original values
-                Console.ForegroundColor = originalForeground;
-                Console.BackgroundColor = originalBackground;
+                    Console.WriteLine(logEntry);
+                }
+                finally
+                {
+                    // Reset console colors to original values
+                    Console.ForegroundColor = originalForeground;
+                    Console.BackgroundColor = originalBackground;
+                }
             }
 
             lock (_lock)

@@ -77,8 +77,24 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             if (raw.MaxDownloadThreads.HasValue)
                 MaxDownloadThreads = raw.MaxDownloadThreads.Value;
+            if (MaxDownloadThreads < 1)
+            {
+                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is invalid. Falling back to 1.", Enums.StatusSeverityType.Warning);
+                MaxDownloadThreads = 1;
+            }
+            else if (MaxDownloadThreads > 25)
+            {
+                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is unreasonably high and may get you rate-limited or blocked. Clamping to 25.", Enums.StatusSeverityType.Warning);
+                MaxDownloadThreads = 25;
+            }
+
             if (raw.LogExpiryInDays.HasValue)
                 LogExpiryInDays = raw.LogExpiryInDays.Value;
+            if (LogExpiryInDays < 0)
+            {
+                TraceLogger.Log($"Configured logExpiryInDays ({LogExpiryInDays}) is invalid. Falling back to 7.", Enums.StatusSeverityType.Warning);
+                LogExpiryInDays = 7;
+            }
             _instance = this;
         }
 

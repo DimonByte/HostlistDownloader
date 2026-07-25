@@ -44,6 +44,11 @@ List<string> remainingArgs = [];
 
 foreach (string arg in args)
 {
+    if (arg == "/quiet" || arg == "/q")
+    {
+        TraceLogger.QuietMode = true;
+        TraceLogger.Log("/quiet enabled. Console output will be suppressed.");
+    }
     if (arg == "/fresh" || arg == "/fr")
     {
         TraceLogger.Log("/fresh enabled. Clearing block and white list folders...");
