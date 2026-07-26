@@ -26,6 +26,20 @@ using System.Net.Http.Headers;
 
 namespace HostlistDownloader.Modules.DownloadSystem
 {
+    /// <summary>
+    /// Outcome of a single download attempt sequence (including retries). Distinguishing Permanent
+    /// from Transient failures lets callers avoid endlessly retrying/recovering a URL that returned
+    /// 404 - that will never resolve itself, unlike a network blip or timeout.
+    /// </summary>
+    public enum DownloadOutcome
+    {
+        Success,
+        SkippedUpToDate,
+        TransientFailure,
+        PermanentFailure,
+        Cancelled
+    }
+
     internal class DownloadController
     {
         private static readonly HttpClient httpClient = new();
@@ -41,19 +55,19 @@ namespace HostlistDownloader.Modules.DownloadSystem
             httpClient.Timeout = DefaultTimeout;
         }
 
-        public static async Task<bool> DownloadFileAsync(string url, string localPath, bool forceMode, CancellationToken cancellationToken = default)
+        public static async Task<DownloadOutcome> DownloadFileAsync(string url, string localPath, bool forceMode, CancellationToken cancellationToken = default)
         {
             string WorkingOnName = Path.GetFileName(url);
             TraceLogger.Log($"{WorkingOnName} | Checking {url}...");
             if (string.IsNullOrEmpty(url))
             {
                 TraceLogger.Log($"{WorkingOnName} | URL is null or empty", Enums.StatusSeverityType.Error);
-                return false;
+                return DownloadOutcome.PermanentFailure;
             }
             if (string.IsNullOrEmpty(localPath))
             {
                 TraceLogger.Log($"{WorkingOnName} | Local path is null or empty", Enums.StatusSeverityType.Error);
-                return false;
+                return DownloadOutcome.PermanentFailure;
             }
             string metadataPath1 = localPath + ".etag";
             if (File.Exists(metadataPath1))
@@ -78,7 +92,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                             else
                             {
                                 TraceLogger.Log($"{WorkingOnName} | ETag matches - file is already up to date. Skipping download.");
-                                return true;
+                                return DownloadOutcome.SkippedUpToDate;
                             }
                         }
                         else
@@ -145,14 +159,14 @@ namespace HostlistDownloader.Modules.DownloadSystem
                         }
                         HostListManager.HasDownloadedUpdates = true;
                         TraceLogger.Log($"{WorkingOnName} | Download completed successfully.");
-                        return true;
+                        return DownloadOutcome.Success;
                     }
                     else
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
                             TraceLogger.Log($"{WorkingOnName} | Download failed with status code: {response.StatusCode} (File not found, not retrying)", Enums.StatusSeverityType.Error);
-                            return false;
+                            return DownloadOutcome.PermanentFailure;
                         }
                         TraceLogger.Log($"{WorkingOnName} | Download attempt {attempt} failed with status code: {response.StatusCode}", Enums.StatusSeverityType.Warning);
                         if (attempt < MaxRetries)
@@ -165,7 +179,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     TraceLogger.Log($"{WorkingOnName} | Download was cancelled by user", Enums.StatusSeverityType.Warning);
-                    return false;
+                    return DownloadOutcome.Cancelled;
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -200,7 +214,7 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 }
             }
             TraceLogger.Log($"{WorkingOnName} | Download failed after {MaxRetries} attempts", Enums.StatusSeverityType.Error);
-            return false;
+            return DownloadOutcome.TransientFailure;
         }
     }
 }

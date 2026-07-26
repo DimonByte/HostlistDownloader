@@ -113,56 +113,56 @@ namespace HostlistDownloader.Modules.DownloadSystem
             TraceLogger.Log($"Attempting to merge user defined website lists for {CombinedLocation}...");
             try
             {
-                // Get existing lines from combined list for uniqueness check
-                //var existingLines = ReadLinesFromFileCached(CombinedLocation);
-                IReadOnlyList<string> existingLines;
+                IReadOnlyList<string> userDefinedLines = isBlocklist
+                    ? ConfigReader.Instance.UserWebsiteBlocklist
+                    : ConfigReader.Instance.UserWebsiteWhitelist;
+                TraceLogger.Log($"User defined list entry count: {userDefinedLines.Count:N0}");
 
-                if (isBlocklist)
-                {
-                    existingLines = ConfigReader.Instance.UserWebsiteBlocklist;
-                }
-                else
-                {
-                    existingLines = ConfigReader.Instance.UserWebsiteWhitelist;
-                }
-                TraceLogger.Log($"Existing lines count in user defined list: {existingLines.Count:N0}");
+                // Read what's already in the compiled/downloaded combined list so we APPEND unique
+                // entries to it instead of replacing it. Previously this used File.WriteAllLines with
+                // only the user-defined entries, which discarded every downloaded entry on each run.
+                var existingCombinedLines = new HashSet<string>(
+                    File.Exists(CombinedLocation) ? File.ReadAllLines(CombinedLocation) : [],
+                    StringComparer.OrdinalIgnoreCase);
 
-                var filteredLines = new List<string>();
-                string[] trimmedURLLines = new string[existingLines.Count];
+                var newEntries = new List<string>();
 
-                for (int i = 0; i < existingLines.Count; i++)
+                foreach (var rawLine in userDefinedLines)
                 {
-                    trimmedURLLines[i] = existingLines.ElementAt(i).Trim();
-                    if (string.IsNullOrWhiteSpace(trimmedURLLines[i]) || trimmedURLLines[i].StartsWith('#'))
+                    string trimmed = rawLine.Trim();
+                    if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
                     {
-                        TraceLogger.Log($"Null User URL. {CombinedLocation}. Ignoring.", Enums.StatusSeverityType.Warning);
-                        return;
+                        // Skip just this entry - a single blank/comment line shouldn't abort the whole merge.
+                        continue;
                     }
-                    //Check if the trimmed line starts or ends with a * to allow for wildcard entries, if so, we will not check for uniqueness since it is a wildcard entry
-                    if (trimmedURLLines[i].StartsWith('*') || trimmedURLLines[i].EndsWith('*'))
+
+                    bool isWildcard = trimmed.StartsWith('*') || trimmed.EndsWith('*');
+
+                    // Wildcard entries (e.g. "*.example.com") aren't deduplicated against the combined list
+                    // since they aren't a literal line match, but duplicate wildcard entries within the
+                    // user's own list are still skipped.
+                    if (isWildcard)
                     {
-                        if (!existingLines.Contains(trimmedURLLines[i]))
+                        if (existingCombinedLines.Add(trimmed))
                         {
-                            filteredLines.Add(trimmedURLLines[i]);
+                            newEntries.Add(trimmed);
                         }
                     }
-                    else
+                    else if (existingCombinedLines.Add(trimmed))
                     {
-                        filteredLines.Add(trimmedURLLines[i]);
+                        newEntries.Add(trimmed);
                     }
-                    //TraceLogger.Log($"User defined list entry: {trimmedURLLines[i]}");
                 }
-                //If not check for exact match on the line. So contain wont work here.
 
-                if (filteredLines.Count != 0)
+                if (newEntries.Count != 0)
                 {
-                    File.WriteAllLines(CombinedLocation, filteredLines);
-                    TraceLogger.Log($"Merged user defined lists on {CombinedLocation} (added {filteredLines.Count} unique entries)");
+                    File.AppendAllLines(CombinedLocation, newEntries);
+                    TraceLogger.Log($"Merged user defined list into {CombinedLocation} (added {newEntries.Count:N0} unique entries)");
                     hasUpdates = true;
                 }
                 else
                 {
-                    TraceLogger.Log("No new unique entries to add to the combined list.");
+                    TraceLogger.Log("No new unique user-defined entries to add to the combined list.");
                 }
             }
             catch (Exception ex)
@@ -204,12 +204,20 @@ namespace HostlistDownloader.Modules.DownloadSystem
             SemaphoreSlim semaphore = new(ConfigReader.Instance.MaxDownloadThreads, ConfigReader.Instance.MaxDownloadThreads);
 
             List<Task> tasks = [];
+            // Track per-URL outcome so we can (a) print a real summary and (b) tell CheckIntegrity which
+            // URLs are known-permanently-dead (404) so it doesn't treat them as a file-count mismatch and
+            // loop forever trying to "recover" a URL that will never succeed.
+            var outcomes = new System.Collections.Concurrent.ConcurrentDictionary<string, DownloadOutcome>();
+            // fileName -> source URL, so SearchManager can attribute a matched line back to the real
+            // source URL rather than just an internal "3 - hosts.txt" filename.
+            var sourceManifest = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
 
             foreach (var url in allUrls)
             {
                 var threadCount = ++completedCount;
                 var fileName = $"{threadCount} - {Path.GetFileName(url)}";
                 var filePath = Path.Combine(ListFolderLocation, fileName);
+                sourceManifest[fileName] = url;
 
                 //TraceLogger.Log($"Adding {fileName} download to task queue...");
                 tasks.Add(Task.Run(async () =>
@@ -220,26 +228,41 @@ namespace HostlistDownloader.Modules.DownloadSystem
                         await semaphore.WaitAsync(cancellationToken); // Wait for available slot
                         acquired = true;
                         TraceLogger.Log($"Added {fileName} to queue.");
-                        var downloadSuccess = await DownloadController.DownloadFileAsync(url, filePath, forceMode, cancellationToken);
+                        var outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, cancellationToken);
+                        outcomes[url] = outcome;
                         ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloaded {Path.GetFileName(url)}");
-                        //TraceLogger.Log($"{fileName} task complete.");
-                        //Check if DownloadFileAsync returned false, if so set ProblemDuringUpdate to true and log a warning
-                        if (!downloadSuccess)
+
+                        switch (outcome)
                         {
-                            ProblemDuringUpdate = true;
-                            TraceLogger.Log($"Download operation has thrown an exception. Something has gone wrong with {url}. Check logs for more details.", Enums.StatusSeverityType.Error);
-                        }
-                        else
-                        {
-                            TraceLogger.Log($"{fileName} downloaded successfully.");
+                            case DownloadOutcome.Success:
+                                TraceLogger.Log($"{fileName} downloaded successfully.");
+                                break;
+                            case DownloadOutcome.SkippedUpToDate:
+                                TraceLogger.Log($"{fileName} already up to date, skipped.");
+                                break;
+                            case DownloadOutcome.PermanentFailure:
+                                // Don't set ProblemDuringUpdate for a permanent failure (e.g. 404) - that's an
+                                // expected/known-bad source that CheckIntegrity accounts for separately, not a
+                                // fault in the app or this run.
+                                TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
+                                break;
+                            case DownloadOutcome.TransientFailure:
+                                ProblemDuringUpdate = true;
+                                TraceLogger.Log($"Download of {url} failed after retries. This may succeed on a later run. Check logs for more details.", Enums.StatusSeverityType.Error);
+                                break;
+                            case DownloadOutcome.Cancelled:
+                                TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
+                                break;
                         }
                     }
                     catch (OperationCanceledException)
                     {
+                        outcomes[url] = DownloadOutcome.Cancelled;
                         TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
                     }
                     catch (Exception ex)
                     {
+                        outcomes[url] = DownloadOutcome.TransientFailure;
                         ProblemDuringUpdate = true;
                         TraceLogger.Log($"Failed to download {url}: {ex}", Enums.StatusSeverityType.Error);
                     }
@@ -262,18 +285,37 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 return;
             }
 
-            TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds} seconds. Checking if all hostlists have been updated recently");
+            try
+            {
+                string manifestPath = Path.Combine(ListFolderLocation, "_sources.json");
+                var manifestForSerialization = new Dictionary<string, string>(sourceManifest);
+                File.WriteAllText(manifestPath, System.Text.Json.JsonSerializer.Serialize(
+                    manifestForSerialization, ManifestJsonSerializerContext.Default.DictionaryStringString));
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal - SearchManager falls back to raw filenames if this is missing or unreadable.
+                TraceLogger.Log($"Failed to write source manifest for {ListFolderLocation}: {ex.Message}", Enums.StatusSeverityType.Warning);
+            }
+
+            int succeeded = outcomes.Values.Count(o => o == DownloadOutcome.Success);
+            int upToDate = outcomes.Values.Count(o => o == DownloadOutcome.SkippedUpToDate);
+            int permanentFailures = outcomes.Values.Count(o => o == DownloadOutcome.PermanentFailure);
+            int transientFailures = outcomes.Values.Count(o => o == DownloadOutcome.TransientFailure);
+            TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)}: " +
+                $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.");
+
             bool integrityOk;
             if (!HasDownloadedUpdates)
             {
                 TraceLogger.Log("No need to compile lists since no available updates were downloaded. Checking integrity of existing lists...");
-                integrityOk = CheckIntegrity(ListFolderLocation, allUrls.Count, CombinedListLocation, startTime);
+                integrityOk = CheckIntegrity(ListFolderLocation, allUrls.Count, permanentFailures, CombinedListLocation, startTime);
             }
             else
             {
                 hasUpdates = true; // Set the flag to indicate that updates were downloaded, this will tell the GenerateCombinedList method to run later
                 // Use IOManager methods but with the right folder path
-                integrityOk = CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, startTime);
+                integrityOk = CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, permanentFailures, startTime);
             }
 
             if (integrityOk)
@@ -285,33 +327,48 @@ namespace HostlistDownloader.Modules.DownloadSystem
                 return;
             }
 
+            if (permanentFailures > 0 && transientFailures == 0)
+            {
+                // Every failure was a permanent one (404 etc). Re-downloading will hit the exact same
+                // 404s again, so the "clear and retry" recovery path can't fix anything here - it would
+                // just loop forever. Treat this as a config problem instead of a transient integrity fault.
+                TraceLogger.Log($"Integrity check failed because {permanentFailures} source(s) are permanently unreachable, not due to a transient issue. Automatic recovery would repeat the same failure, so it's being skipped. Please review and fix the affected URL(s) in settings.json.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                return;
+            }
+
             TraceLogger.Log("Attempting automatic recovery: clearing this list's folder and re-downloading everything once...", Enums.StatusSeverityType.Warning);
             IOManager.ClearTempFiles(ListFolderLocation);
             await ProcessDownloadLists(iniLocations, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
         }
 
-        private static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, DateTime startTime)
+        private static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
         {
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
             IOManager.RemoveDuplicates(combinedListLocation);
             IOManager.FormatHosts(combinedListLocation);
-            return CheckIntegrity(listFolderLocation, urlCount, combinedListLocation, startTime);
+            return CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime);
         }
 
         /// <summary>
-        /// Verifies that the number of downloaded files matches the number of configured URLs, and that the
-        /// combined list was actually written when updates were reported. Returns false on mismatch instead of
-        /// exiting immediately, so the caller can attempt one automatic recovery before treating it as fatal.
+        /// Verifies that the number of downloaded files matches the number of configured URLs (minus any
+        /// sources that failed permanently, e.g. a 404, this run - those are expected to be missing and
+        /// re-downloading won't change that), and that the combined list was actually written when updates
+        /// were reported. Returns false on mismatch instead of exiting immediately, so the caller can attempt
+        /// one automatic recovery before treating it as fatal.
         /// </summary>
-        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, string CombinedListLocation, DateTime startTime)
+        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
         {
             TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
-            var files = Directory.GetFiles(ListFolderLocation, "*.*").Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase)).Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase));
+            var files = Directory.GetFiles(ListFolderLocation, "*.*")
+                .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase));
             int fileCount = files.Count();
-            if (fileCount != urlCount)
+            int expectedCount = urlCount - knownPermanentFailures;
+            if (fileCount != expectedCount)
             {
-                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} | File Count: {fileCount}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
                 return false;
             }
             TraceLogger.Log("URL and file count OK.");

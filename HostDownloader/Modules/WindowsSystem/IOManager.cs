@@ -350,6 +350,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             var files = Directory.GetFiles(sourceFolder, "*.*")
                 .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase))
                 .ToArray();
 
             if (files.Length == 0)

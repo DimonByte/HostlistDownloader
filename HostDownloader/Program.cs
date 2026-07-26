@@ -28,7 +28,6 @@ using System.Diagnostics;
 using System.Reflection;
 
 Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
-Console.WriteLine("Arguments: /fresh (/fr) < clears all downloaded hostfile directories and forces a redownload of all hostlists. [Does not delete settings]");
 Stopwatch watch = Stopwatch.StartNew();
 Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
 IOManager.CreateNecessaryDirectoriesAndFiles();
@@ -40,16 +39,20 @@ if (!NetworkChecker.IsNetworkAvailable())
 }
 
 bool fresh = false;
-List<string> remainingArgs = [];
 
-foreach (string arg in args)
+List<string> remainingArgs = [];
+string? searchDomain = null;
+
+for (int i = 0; i < args.Length; i++)
 {
+    string arg = args[i];
+
     if (arg == "/quiet" || arg == "/q")
     {
         TraceLogger.QuietMode = true;
         TraceLogger.Log("/quiet enabled. Console output will be suppressed.");
     }
-    if (arg == "/fresh" || arg == "/fr")
+    else if (arg == "/fresh" || arg == "/fr")
     {
         TraceLogger.Log("/fresh enabled. Clearing block and white list folders...");
         IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
@@ -57,12 +60,41 @@ foreach (string arg in args)
         IOManager.ClearTempFiles(IOManager.CombinedListFolderLocation);
         fresh = true;
     }
+    else if (arg == "/search" || arg == "/s")
+    {
+        if (i + 1 >= args.Length || args[i + 1].StartsWith('/'))
+        {
+            TraceLogger.Log("/search requires a domain argument, e.g. /search example.com", Enums.StatusSeverityType.Error);
+            Environment.Exit(ErrorCodes.InvalidConfigEntry);
+        }
+        searchDomain = args[i + 1];
+        i++; // consume the domain token so it isn't also treated as a separate arg
+    }
+    else if (arg == "/purge" || arg == "/p")
+    {
+        TraceLogger.Log("/purge enabled. Deleting all logs...");
+        TraceLogger.PurgeAllLogs();
+    }
+    else if (arg == "/help" || arg == "/h" || arg == "/?")
+    {
+        Console.WriteLine("HostlistDownloader Help:");
+        Console.WriteLine("/quiet or /q: Suppresses console output.");
+        Console.WriteLine("/fresh or /fr: Clears block and white list folders before updating. Useful for troubleshooting.");
+        Console.WriteLine("/search <domain> or /s <domain>: Searches for a specific domain in the hostlists.");
+        Console.WriteLine("/purge or /p: Deletes all log files.");
+        Console.WriteLine("/help or /h: Displays this help message.");
+        Environment.Exit(0);
+    }
     else
     {
         remainingArgs.Add(arg);
     }
 }
-
+if (searchDomain != null)
+{
+    SearchManager.Search(searchDomain);
+    return;
+}
 TraceLogger.ClearExpiredLogs();
 
 HostListManager.StartListProcessing(fresh); //Main Update Loop
