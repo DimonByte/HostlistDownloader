@@ -21,10 +21,11 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.HostListDownloaderInternals;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 
-namespace HostlistDownloader.Modules.DownloadSystem
+namespace HostlistDownloader.Modules.Network
 {
     /// <summary>
     /// Outcome of a single download attempt sequence (including retries). Distinguishing Permanent

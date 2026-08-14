@@ -263,17 +263,17 @@ namespace HostlistDownloader.Modules.WindowsSystem
         {
             string manifestPath = Path.Combine(folder, "_sources.json");
             if (!File.Exists(manifestPath))
-                return new();
+                return [];
 
             try
             {
                 var json = File.ReadAllText(manifestPath);
-                return JsonSerializer.Deserialize(json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? new();
+                return JsonSerializer.Deserialize(json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? [];
             }
             catch (Exception ex)
             {
                 TraceLogger.Log($"Could not read source manifest {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warning);
-                return new();
+                return [];
             }
         }
 

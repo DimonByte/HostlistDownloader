@@ -21,8 +21,9 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules;
-using HostlistDownloader.Modules.DownloadSystem;
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.HostListDownloaderInternals;
+using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Reflection;

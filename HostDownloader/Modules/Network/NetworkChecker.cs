@@ -1,4 +1,4 @@
-﻿namespace HostlistDownloader.Modules.DownloadSystem
+﻿namespace HostlistDownloader.Modules.Network
 {
     internal class NetworkChecker
     {
