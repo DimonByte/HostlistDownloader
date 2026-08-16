@@ -56,12 +56,12 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (blockListIni.Length != 0)
             {
                 TraceLogger.Log("Blocklist is configured. Updating blocklists...");
-                //First check if the url and file count are the same, if not the user has added or removed a url and so we need to start from scratch.
-                if (CheckURLandFileCount(new DirectoryInfo(IOManager.BlockListFolderLocation), ConfigReader.Instance.Blocklists.Count, 0) == false)
-                {
-                    TraceLogger.Log("Blocklist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing blocklist folder to start fresh.", Enums.StatusSeverityType.Warning);
-                    IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
-                }
+                ////First check if the url and file count are the same, if not the user has added or removed a url and so we need to start from scratch.
+                //if (CheckURLandFileCount(new DirectoryInfo(IOManager.BlockListFolderLocation), ConfigReader.Instance.Blocklists.Count, 0) == false)
+                //{
+                //    TraceLogger.Log("Blocklist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing blocklist folder to start fresh.", Enums.StatusSeverityType.Warning);
+                //    IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
+                //}
                 // Since we're using the ConfigReader now, we need to adapt how we handle blocklist files
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
@@ -86,11 +86,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (whiteListIni.Length != 0)
             {
                 //First check if the url and file count are the same, if not the user has added or removed a url and so we need to start from scratch.
-                if (CheckURLandFileCount(new DirectoryInfo(IOManager.WhiteListFolderLocation), ConfigReader.Instance.Whitelist.Count, 0) == false)
-                {
-                    TraceLogger.Log("Whitelist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing whitelist folder to start fresh.", Enums.StatusSeverityType.Warning);
-                    IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
-                }
+                //if (CheckURLandFileCount(new DirectoryInfo(IOManager.WhiteListFolderLocation), ConfigReader.Instance.Whitelist.Count, 0) == false)
+                //{
+                //    TraceLogger.Log("Whitelist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing whitelist folder to start fresh.", Enums.StatusSeverityType.Warning);
+                //    IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
+                //}
                 TraceLogger.Log("Whitelist is configured. Updating whitelists...");
                 // Process multiple whitelist files
                 ProcessDownloadLists(whiteListIni,
@@ -363,18 +363,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             return CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime);
         }
 
-        private static bool CheckURLandFileCount(DirectoryInfo files, int urlCount, int knownPermanentFailures)
-        {
-            int fileCount = files.GetFiles().Length;
-            int expectedCount = urlCount - knownPermanentFailures;
-            if (fileCount != expectedCount)
-            {
-                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
-                return false;
-            }
-            return true;
-        }
-
         /// <summary>
         /// Verifies that the number of downloaded files matches the number of configured URLs (minus any
         /// sources that failed permanently, e.g. a 404, this run - those are expected to be missing and
@@ -389,10 +377,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase));
-
-            if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
+            int fileCount = files.Count();
+            int expectedCount = urlCount - knownPermanentFailures;
+            if (fileCount != expectedCount)
             {
-                TraceLogger.Log($"Integrity check failure (URL and File Count Mismatch after updating): URL count ({urlCount}) and file count ({files.Count()}) do not match. Known unreachable sources: {knownPermanentFailures}.", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
                 return false;
             }
             TraceLogger.Log("URL and file count OK.");
@@ -418,7 +407,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             TraceLogger.Log("Integrity check complete. No issues detected.");
             return true;
         }
-
+        
         public static void GenerateCombinedList()
         {
             TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocation)} list...");
