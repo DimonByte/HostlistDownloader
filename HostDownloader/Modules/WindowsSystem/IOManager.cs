@@ -22,7 +22,6 @@
 
 using HostlistDownloader.Modules.Helpers;
 using System.Diagnostics;
-using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -225,126 +224,6 @@ namespace HostlistDownloader.Modules.WindowsSystem
         //    File.AppendAllText(iniFilePath, $"{domain}{Environment.NewLine}");
         //}
 
-        public static void FormatHosts(string combinedFileLocation)
-        {
-            TraceLogger.Log($"Attempting to format Hostfile: {combinedFileLocation}");
-            string formatTypePath = ConfigReader.Instance.Formattype;
-            string formatType = "domain"; // default format type
-
-            //if (File.Exists(formatTypePath))
-            //{
-            //    try
-            //    {
-            //        var lines = File.ReadAllLines(formatTypePath);
-            //        if (lines.Length > 0)
-            //        {
-            //            formatType = lines[0].Trim().ToLowerInvariant();
-            //            TraceLogger.Log($"Format Type: {formatType}");
-            //        }
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        TraceLogger.Log($"Error reading format type from {formatTypePath}: {ex}. Reverting to domain format.", Enums.StatusSeverityType.Error);
-            //    }
-            //}
-
-            try
-            {
-                formatType = formatTypePath.Trim().ToLowerInvariant();
-                TraceLogger.Log($"Format Type: {formatType}");
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Error reading format type from {formatTypePath}: {ex}. Reverting to domain format.", Enums.StatusSeverityType.Error);
-            }
-
-            if (!File.Exists(combinedFileLocation))
-            {
-                TraceLogger.Log($"Combined file not found: {combinedFileLocation}", Enums.StatusSeverityType.Warning);
-                return;
-            }
-
-            var originalLines = File.ReadAllLines(combinedFileLocation);
-            var formattedLines = new List<string>();
-
-            foreach (var line in originalLines)
-            {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
-                    continue;
-
-                var trimmedLine = line.Trim();
-                int commentIndex = trimmedLine.IndexOf('#');
-                if (commentIndex >= 0)
-                {
-                    trimmedLine = trimmedLine[..commentIndex].Trim();
-                }
-
-                var parts = trimmedLine.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-                string? validIp = null;
-                string domainList = "";
-
-                if (parts.Length >= 2)
-                {
-                    //Strictly validate the first token as a real IP address before treating it as such.
-                    if (IPAddress.TryParse(parts[0], out var parsedIp))
-                    {
-                        validIp = parsedIp.ToString();
-                        domainList = string.Join(" ", parts.Skip(1));
-                    }
-                    else
-                    {
-                        // First token failed IP validation. Likely a reversed format ("domain ip") or malformed entry.
-                        // Fallback: Treat the entire line as a domain to prevent breaking downstream blocklist parsers.
-                        TraceLogger.Log($"Malformed hosts entry (invalid/missing IP): '{trimmedLine}'. Formatting as domain-only.", Enums.StatusSeverityType.Warning);
-                        domainList = trimmedLine.Replace('\t', ' ').Trim();
-                    }
-                }
-                else if (parts.Length == 1)
-                {
-                    domainList = parts[0];
-                }
-
-                switch (formatType)
-                {
-                    case "hosts":
-                    case "host":
-                        formattedLines.Add(validIp is not null ? $"{validIp} {domainList}" : $"0.0.0.0 {domainList}");
-                        break;
-                    case "domain":
-                        formattedLines.Add(domainList);
-                        break;
-                    case "iponly":
-                        if (validIp is not null && !string.Equals(validIp, "0.0.0.0", StringComparison.OrdinalIgnoreCase))
-                        {
-                            formattedLines.Add(validIp);
-                        }
-                        // Explicitly logs skipped entries for iponly format without valid IPs
-                        else if (originalLines.Contains(line) && line.Trim() != "")
-                        { /* Silently skip in production, or add TraceLogger if preferred */ }
-                        break;
-                    case "dnsmasq":
-                        formattedLines.Add($"address=/{domainList}/0.0.0.0");
-                        break;
-                    case "wildcard":
-                        formattedLines.Add($"*.{domainList}");
-                        break;
-                    default:
-                        formattedLines.Add(domainList);
-                        break;
-                }
-            }
-
-            try
-            {
-                TraceLogger.Log($"Formatting Complete. Saving formattedLines to {combinedFileLocation}");
-                File.WriteAllLines(combinedFileLocation, formattedLines);
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Error writing formatted lines to {combinedFileLocation}: {ex}", Enums.StatusSeverityType.Error);
-            }
-        }
-
         public static void MergeFiles(string sourceFolder, string outputFile)
         {
             var files = Directory.GetFiles(sourceFolder, "*.*")
@@ -395,6 +274,36 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
         }
 
+        /// <summary>
+        /// Deletes the specified files (and their .etag companions) from the given folder.
+        /// </summary>
+        public static void DeleteFileAlongWithETag(string listFolderLocation, List<string> fileNames)
+        {
+            foreach (var fileName in fileNames)
+            {
+                var filePath = Path.Combine(listFolderLocation, fileName);
+                try
+                {
+                    if (File.Exists(filePath))
+                    {
+                        File.Delete(filePath);
+                        TraceLogger.Log($"Deleted removed source file: {fileName}");
+                    }
+
+                    // Also remove the .etag file if present
+                    var etagPath = filePath + ".etag";
+                    if (File.Exists(etagPath))
+                    {
+                        File.Delete(etagPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to delete {fileName}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                }
+            }
+        }
+
         //public static void ClearFiles(string folder)
         //{
         //    var files = Directory.GetFiles(folder, "*.*");
@@ -435,46 +344,6 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
             }
             TraceLogger.Log($"Cleared all files in folder: {folder}");
-        }
-
-        public static void RemoveDuplicates(string MergedFileLoc)
-        {
-            try
-            {
-                TraceLogger.Log("Removing duplicates from merge...");
-
-                if (!File.Exists(MergedFileLoc))
-                {
-                    TraceLogger.Log($"File not found: {MergedFileLoc}", Enums.StatusSeverityType.Warning);
-                    return;
-                }
-
-                var originalLines = File.ReadAllLines(MergedFileLoc);
-                Stopwatch watch = Stopwatch.StartNew();
-                var uniqueLines = new HashSet<string>(originalLines, StringComparer.OrdinalIgnoreCase);
-                File.WriteAllLines(MergedFileLoc, uniqueLines);
-
-                watch.Stop();
-                TraceLogger.Log($"Duplicated removed in {watch.Elapsed.TotalSeconds} seconds.");
-
-                int removedLines = originalLines.Length - uniqueLines.Count;
-                var fileInfo = new FileInfo(MergedFileLoc);
-                long originalFileSize = originalLines.Sum(line => System.Text.Encoding.UTF8.GetByteCount(line) + 2); // +2 for newline characters
-                long newSize = uniqueLines.Sum(line => System.Text.Encoding.UTF8.GetByteCount(line) + 2);
-                long sizeDifference = originalFileSize - newSize;
-
-                TraceLogger.Log($"Removed {removedLines:N0} lines ({FormatBytes(sizeDifference)} of space saved)");
-                TraceLogger.Log($"Total lines in {MergedFileLoc} before removing duplicates: {originalLines.Length:N0}");
-                TraceLogger.Log($"Total lines in {MergedFileLoc} after removing duplicates: {uniqueLines.Count:N0}");
-            }
-            catch (FileNotFoundException ex1)
-            {
-                TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the HLDcombined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Error removing duplicates from {MergedFileLoc}: {ex}", Enums.StatusSeverityType.Error);
-            }
         }
 
         public static string FormatBytes(long bytes)

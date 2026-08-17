@@ -64,7 +64,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public string Formattype { get; }
         public IReadOnlyList<string> UserWebsiteBlocklist { get; }
         public IReadOnlyList<string> UserWebsiteWhitelist { get; }
-        public int MaxDownloadThreads { get; } = 3;
+        public int MaxDownloadThreads { get; } = 4;
         public int LogExpiryInDays { get; } = 7;
 
         internal ConfigReader(Settings raw)

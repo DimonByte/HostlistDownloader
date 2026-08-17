@@ -33,7 +33,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         public static bool ProblemDuringUpdate;
         public static bool HasDownloadedUpdates;
         private static bool hasUpdates = false;
-
         private static readonly Dictionary<string, HashSet<string>> _fileLineCache = [];
         private static readonly Lock _cacheLock = new();
 
@@ -41,7 +40,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         {
             TraceLogger.Log("Starting list processing...", Enums.StatusSeverityType.Information);
 
-            // Use ConfigReader to get configuration values instead of IOManager
             string[] blockListIni = [.. ConfigReader.Instance.Blocklists];
             string[] whiteListIni = [.. ConfigReader.Instance.Whitelist];
             string[] userblockListIni = [.. ConfigReader.Instance.UserWebsiteBlocklist];
@@ -56,13 +54,24 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (blockListIni.Length != 0)
             {
                 TraceLogger.Log("Blocklist is configured. Updating blocklists...");
-                ////First check if the url and file count are the same, if not the user has added or removed a url and so we need to start from scratch.
-                //if (CheckURLandFileCount(new DirectoryInfo(IOManager.BlockListFolderLocation), ConfigReader.Instance.Blocklists.Count, 0) == false)
-                //{
-                //    TraceLogger.Log("Blocklist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing blocklist folder to start fresh.", Enums.StatusSeverityType.Warning);
-                //    IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
-                //}
-                // Since we're using the ConfigReader now, we need to adapt how we handle blocklist files
+
+                // Reconcile sources: detect added/removed URLs individually instead of clearing everything
+                var (addedUrls, removedFileNames) = ReconcileSources(IOManager.BlockListFolderLocation, ConfigReader.Instance.Blocklists);
+
+                if (removedFileNames.Count > 0)
+                {
+                    TraceLogger.Log($"Blocklist: {removedFileNames.Count} URL(s) removed from config. Deleting only the affected file(s)...", Enums.StatusSeverityType.Warning);
+                    IOManager.DeleteFileAlongWithETag(IOManager.BlockListFolderLocation, removedFileNames);
+                }
+                if (addedUrls.Count > 0)
+                {
+                    TraceLogger.Log($"Blocklist: {addedUrls.Count} new URL(s) detected in config. Will download only those...");
+                }
+                if (addedUrls.Count == 0 && removedFileNames.Count == 0)
+                {
+                    TraceLogger.Log("Blocklist: No URL changes detected. Will verify existing files are up to date.");
+                }
+
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
                     IOManager.CombinedBlockListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
@@ -75,7 +84,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userblockListIni.Length != 0)
             {
                 TraceLogger.Log("User blocklist is configured. Merging user config...");
-                // Process multiple user-blocklist files
                 MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocation, isBlocklist: true);
             }
             else
@@ -85,14 +93,24 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
             if (whiteListIni.Length != 0)
             {
-                //First check if the url and file count are the same, if not the user has added or removed a url and so we need to start from scratch.
-                //if (CheckURLandFileCount(new DirectoryInfo(IOManager.WhiteListFolderLocation), ConfigReader.Instance.Whitelist.Count, 0) == false)
-                //{
-                //    TraceLogger.Log("Whitelist URL and file count mismatch detected, possibly due to user adding or removing URLs. Clearing whitelist folder to start fresh.", Enums.StatusSeverityType.Warning);
-                //    IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
-                //}
+                // Reconcile sources for whitelist
+                var (wlAdded, wlRemoved) = ReconcileSources(IOManager.WhiteListFolderLocation, ConfigReader.Instance.Whitelist);
+
+                if (wlRemoved.Count > 0)
+                {
+                    TraceLogger.Log($"Whitelist: {wlRemoved.Count} URL(s) removed from config. Deleting only the affected file(s)...", Enums.StatusSeverityType.Warning);
+                    IOManager.DeleteFileAlongWithETag(IOManager.WhiteListFolderLocation, wlRemoved);
+                }
+                if (wlAdded.Count > 0)
+                {
+                    TraceLogger.Log($"Whitelist: {wlAdded.Count} new URL(s) detected in config. Will download only those...");
+                }
+                if (wlAdded.Count == 0 && wlRemoved.Count == 0)
+                {
+                    TraceLogger.Log("Whitelist: No URL changes detected. Will verify existing files are up to date.");
+                }
+
                 TraceLogger.Log("Whitelist is configured. Updating whitelists...");
-                // Process multiple whitelist files
                 ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
                     IOManager.CombinedWhiteListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
@@ -105,7 +123,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userwhiteListIni.Length != 0)
             {
                 TraceLogger.Log("User Whitelist is configured. Merging user config...");
-                // Process multiple user-whitelist files
                 MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocation, isBlocklist: false);
             }
             else
@@ -119,6 +136,112 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
 
             TraceLogger.Log("Host lists update completed!");
+        }
+
+        /// <summary>
+        /// Compares the previous run's _sources.json manifest against the current configuration
+        /// to identify which URLs were added or removed since the last run.
+        /// </summary>
+        /// <param name="listFolderLocation">Folder containing the downloaded list files and _sources.json.</param>
+        /// <param name="currentConfigUrls">The full set of URLs from the current configuration.</param>
+        /// <returns>
+        /// A tuple of:
+        /// <list type="bullet">
+        /// <item><description><b>addedUrls</b> – URLs present in config but absent from the previous manifest (new sources to download).</description></item>
+        /// <item><description><b>removedFileNames</b> – File names from the previous manifest whose URLs are no longer in config (files to delete).</description></item>
+        /// </list>
+        /// </returns>
+        private static (List<string> addedUrls, List<string> removedFileNames) ReconcileSources(
+            string listFolderLocation,
+            IReadOnlyList<string> currentConfigUrls)
+        {
+            string manifestPath = Path.Combine(listFolderLocation, "_sources.json");
+            var addedUrls = new List<string>();
+            var removedFileNames = new List<string>();
+
+            // If there's no manifest yet (first run), everything is "new"
+            if (!File.Exists(manifestPath))
+            {
+                TraceLogger.Log($"No _sources.json found in {listFolderLocation}. Treating all {currentConfigUrls.Count} URL(s) as new (first run).");
+                addedUrls.AddRange(currentConfigUrls);
+                return (addedUrls, removedFileNames);
+            }
+
+            Dictionary<string, string> previousSources;
+            try
+            {
+                var json = File.ReadAllText(manifestPath);
+                previousSources = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                    json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? [];
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Failed to read _sources.json in {listFolderLocation} ({ex.Message}). Treating all URLs as new.", Enums.StatusSeverityType.Warning);
+                addedUrls.AddRange(currentConfigUrls);
+                return (addedUrls, removedFileNames);
+            }
+
+            // Build a lookup: URL → fileName from the previous manifest
+            var previousUrlLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in previousSources)
+            {
+                previousUrlLookup[kvp.Value] = kvp.Key; // url → fileName
+            }
+
+            // Detect removed URLs: in previous manifest but NOT in current config
+            foreach (var url in previousUrlLookup.Keys)
+            {
+                if (!currentConfigUrls.Any(c => c.Equals(url, StringComparison.OrdinalIgnoreCase)))
+                {
+                    removedFileNames.Add(previousUrlLookup[url]);
+                }
+            }
+
+            // Detect added URLs: in current config but NOT in previous manifest
+            foreach (var url in currentConfigUrls)
+            {
+                if (!previousUrlLookup.ContainsKey(url))
+                {
+                    addedUrls.Add(url);
+                }
+            }
+            TraceLogger.Log($"Reconciliation complete for {listFolderLocation}: {addedUrls.Count} new URL(s), {removedFileNames.Count} removed URL(s).");
+            return (addedUrls, removedFileNames);
+        }
+
+        /// <summary>
+        /// After ProcessDownloadLists writes the new _sources.json, removes any orphaned files
+        /// in the folder that are no longer referenced by the manifest. This handles the case
+        /// where file numbering shifts after a URL removal (e.g. "3-C.txt" becomes "2-C.txt").
+        /// </summary>
+        private static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
+        {
+            var validFileNames = new HashSet<string>(validSources.Keys, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var file in Directory.GetFiles(listFolderLocation))
+            {
+                var fileName = Path.GetFileName(file);
+
+                // Skip non-list files
+                if (fileName.EndsWith(".etag", StringComparison.OrdinalIgnoreCase)) continue;
+                if (fileName.Equals("_sources.json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (fileName.Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (!validFileNames.Contains(fileName))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        var etagPath = file + ".etag";
+                        if (File.Exists(etagPath)) File.Delete(etagPath);
+                        TraceLogger.Log($"Cleaned up orphaned file: {fileName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLogger.Log($"Failed to clean up orphaned file {fileName}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                    }
+                }
+            }
         }
 
         private static void MergeUserDefinedDomains(string CombinedLocation, bool isBlocklist)
@@ -145,7 +268,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     string trimmed = rawLine.Trim();
                     if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
                     {
-                        // Skip just this entry - a single blank/comment line shouldn't abort the whole merge.
                         continue;
                     }
 
@@ -213,7 +335,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             DateTime startTime = DateTime.Now;
             Stopwatch watch = Stopwatch.StartNew();
             int completedCount = 0;
-            //Semaphore with a maximum of 3 concurrent downloads
             SemaphoreSlim semaphore = new(ConfigReader.Instance.MaxDownloadThreads, ConfigReader.Instance.MaxDownloadThreads);
 
             List<Task> tasks = [];
@@ -232,13 +353,12 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 var filePath = Path.Combine(ListFolderLocation, fileName);
                 sourceManifest[fileName] = url;
 
-                //TraceLogger.Log($"Adding {fileName} download to task queue...");
                 tasks.Add(Task.Run(async () =>
                 {
                     bool acquired = false;
                     try
                     {
-                        await semaphore.WaitAsync(cancellationToken); // Wait for available slot
+                        await semaphore.WaitAsync(cancellationToken);
                         acquired = true;
                         TraceLogger.Log($"Added {fileName} to queue.");
                         var outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, cancellationToken);
@@ -254,9 +374,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                                 TraceLogger.Log($"{fileName} already up to date, skipped.");
                                 break;
                             case DownloadOutcome.PermanentFailure:
-                                // Don't set ProblemDuringUpdate for a permanent failure (e.g. 404) - that's an
-                                // expected/known-bad source that CheckIntegrity accounts for separately, not a
-                                // fault in the app or this run.
                                 TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
                                 break;
                             case DownloadOutcome.TransientFailure:
@@ -298,18 +415,23 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 return;
             }
 
+            // Write the updated _sources.json manifest
+            string manifestPath = Path.Combine(ListFolderLocation, "_sources.json");
+            var manifestForSerialization = new Dictionary<string, string>(sourceManifest);
             try
             {
-                string manifestPath = Path.Combine(ListFolderLocation, "_sources.json");
-                var manifestForSerialization = new Dictionary<string, string>(sourceManifest);
                 File.WriteAllText(manifestPath, System.Text.Json.JsonSerializer.Serialize(
                     manifestForSerialization, ManifestJsonSerializerContext.Default.DictionaryStringString));
             }
             catch (Exception ex)
             {
-                // Non-fatal - SearchManager falls back to raw filenames if this is missing or unreadable.
-                TraceLogger.Log($"Failed to write source manifest for {ListFolderLocation}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                // Non-fatal but may cause issues the next time HLD runs - SearchManager falls back to raw filenames if this is missing or unreadable.
+                TraceLogger.Log($"Failed to write source manifest for {ListFolderLocation}: {ex.Message}", Enums.StatusSeverityType.Error);
             }
+
+            // NEW: Clean up any orphaned files that are no longer in the manifest
+            // (handles renumbering after URL removals, e.g. "3-C.txt" → "2-C.txt")
+            CleanupOrphanedFiles(ListFolderLocation, manifestForSerialization);
 
             int succeeded = outcomes.Values.Count(o => o == DownloadOutcome.Success);
             int upToDate = outcomes.Values.Count(o => o == DownloadOutcome.SkippedUpToDate);
@@ -326,8 +448,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
             else
             {
-                hasUpdates = true; // Set the flag to indicate that updates were downloaded, this will tell the GenerateCombinedList method to run later
-                // Use IOManager methods but with the right folder path
+                hasUpdates = true;
                 integrityOk = CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, permanentFailures, startTime);
             }
 
@@ -358,8 +479,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         {
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
-            IOManager.RemoveDuplicates(combinedListLocation);
-            IOManager.FormatHosts(combinedListLocation);
+            TransformationEngine.BeginTransformation(combinedListLocation);
             return CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime);
         }
 
@@ -370,10 +490,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         /// were reported. Returns false on mismatch instead of exiting immediately, so the caller can attempt
         /// one automatic recovery before treating it as fatal.
         /// </summary>
-        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
+        private static bool CheckURLandFileCount(DirectoryInfo listFolder, int urlCount, int knownPermanentFailures)
         {
-            TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
-            var files = Directory.GetFiles(ListFolderLocation, "*.*")
+            TraceLogger.Log($"Checking URL and file count for {listFolder.FullName}...");
+            IEnumerable<string> files = Directory.GetFiles(listFolder.FullName, "*")
                 .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase));
@@ -384,8 +504,18 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
                 return false;
             }
-            TraceLogger.Log("URL and file count OK.");
+            TraceLogger.Log($"Url Count OK, no mismatch. (URL COUNT: {urlCount} | ACCEPTABLE FILE COUNT: {fileCount})");
+            return true;
+        }
 
+        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
+        {
+            TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
+            if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
+            {
+                TraceLogger.Log($"Integrity check failed due to URL and file count mismatch. Please check the logs for details.", Enums.StatusSeverityType.Error);
+                return false;
+            }
             TraceLogger.Log("Checking if combined list has been written to during update...");
             if (new FileInfo(CombinedListLocation).Length > 0)
             {
@@ -407,30 +537,22 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             TraceLogger.Log("Integrity check complete. No issues detected.");
             return true;
         }
-        
+
         public static void GenerateCombinedList()
         {
             TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocation)} list...");
             try
             {
-                // Use cached version for the white list to avoid repeated file reads
-                //TraceLogger.Log($"Reading white list from: {IOManager.CombinedWhiteListFileLocation}");
                 var whiteList = ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocation);
-                //TraceLogger.Log($"White list count: {whiteList.Count:N0}");
-                //TraceLogger.Log($"Reading block list from: {IOManager.CombinedBlockListFileLocation}");
                 var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocation);
-                //TraceLogger.Log($"Block list count: {blockListLines.Count():N0}");
                 var filteredLines = blockListLines.Where(line =>
                     !whiteList.Any(whiteItem =>
                     {
-                        // 1. If it contains a wildcard, use Regex
                         if (whiteItem.Contains('*'))
                         {
-                            // Convert * to .* and escape other regex characters (like dots)
-                            string pattern = "^" + Regex.Escape(whiteItem).Replace("\\*", ".*") + "$";
+                            string pattern = "^" + Regex.Escape(whiteItem).Replace("\\*", ".") + "$";
                             return Regex.IsMatch(line, pattern, RegexOptions.IgnoreCase);
                         }
-                        // 2. Otherwise, perform an exact line match
                         return line.Equals(whiteItem, StringComparison.OrdinalIgnoreCase);
                     })
                 ).ToList();
@@ -457,13 +579,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         {
             lock (_cacheLock)
             {
-                // Check if we already have this file in cache
                 if (_fileLineCache.TryGetValue(filePath, out var cachedLines))
                 {
                     return cachedLines;
                 }
 
-                // Load the lines and add to cache
                 var lines = new HashSet<string>(ReadLinesFromFile(filePath), StringComparer.OrdinalIgnoreCase);
                 _fileLineCache[filePath] = lines;
                 return lines;

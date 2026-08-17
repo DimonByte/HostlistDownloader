@@ -48,6 +48,8 @@ To configure a task schedule to run silently, set up the task using the followin
 | [`hostfiles/blocklist/*`](#)     | **Host list storage**: Stores individual, downloaded host files and associated etags. |
 | [`hostfiles/whitelist/*`](#)     | **Host list storage**: Stores individual, downloaded whitelist files and associated etags. |
 
+# Settings.json configuration
+
 ### Example `settings.json`
 
 ```json
@@ -66,7 +68,20 @@ To configure a task schedule to run silently, set up the task using the followin
 }
 ```
 
-"formattype" Accepted Values: domain, host, iponly, dnsmasq (output: address=/hostnamehere/0.0.0.0), wildcard (output: *.hostnamehere)
+### `"formattype"` Accepted Values
+
+The `formattype` key controls how every entry in the combined output file is formatted. If the value is missing, unreadable, or unrecognized, the utility defaults to `domain`.
+
+| Value | Output Format | Wildcard (`*.`) Handling |
+| :--- | :--- | :--- |
+| `domain` *(default)* | `example.com` | Strips the `*.` prefix → `example.com` |
+| `hosts` / `host` / `pihole` / `pi-hole` | `0.0.0.0 example.com` | Removed (skipped entirely) |
+| `iponly` | `192.168.1.1` | Removed (no IP to extract) |
+| `ublock` / `ublockorigin` / `uBlock` / `uBlock Origin` | `\|\|example.com^` | Preserved as-is → `*.example.com` |
+| `adguard` / `ad-guard` / `AdGuard` | `\|\|example.com^` | Preserved as-is → `*.example.com` |
+| `dnsmasq` | `address=/example.com/0.0.0.0` | Removed (requires a concrete domain) |
+| `wildcard` | `*.example.com` | Prepends `*.` if not already present |
+| `raw` | Original line (comments/whitespace trimmed) | Preserved as-is |
 
 ### Run result codes (Error codes)
 
