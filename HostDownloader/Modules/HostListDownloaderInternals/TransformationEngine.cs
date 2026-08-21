@@ -49,13 +49,13 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         public static void FormatHosts(string combinedFileLocation)
         {
             TraceLogger.Log($"Attempting to format Hostfile: {combinedFileLocation}");
-            string formatTypePath = ConfigReader.Instance.Formattype;
+            string formatTypePath = ConfigManager.Instance.Formattype;
             string formatType = "domain"; // default format type
 
             try
             {
                 formatType = formatTypePath.Trim().ToLowerInvariant();
-                TraceLogger.Log($"Format Type: {formatType}");
+                TraceLogger.Log($"Format Type: {formatType}", Enums.StatusSeverityType.Debug);
             }
             catch (Exception ex)
             {
@@ -292,10 +292,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     TraceLogger.Log($"  Empty/whitespace lines removed: {emptyRemoved:N0}");
                 TraceLogger.Log($"Lines before: {originalCount:N0} → after: {cleanedLines.Count:N0}");
             }
-            catch (FileNotFoundException ex1)
-            {
-                TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the HLDcombined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
-            }
+            //catch (FileNotFoundException ex1)
+            //{
+            //    TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the HLDcombined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
+            //}
             catch (Exception ex)
             {
                 TraceLogger.Log($"Error removing duplicates from {MergedFileLoc}: {ex}", Enums.StatusSeverityType.Error);

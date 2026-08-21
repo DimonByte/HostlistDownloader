@@ -39,6 +39,8 @@ namespace HostlistDownloader.Modules
         public const int ConfigurationCorrupted = 21;
         public const int InvalidConfigEntry = 22; //Configuration file is present, but the attempt to use configuration failed.
 
+        public const int MissingOrInvalidParameters = 30; //Thrown when the program is run with missing or invalid parameters.
+
         // Update process errors
         public const int UpdateProcessError = 40; //Hostfiles update failed outright.
         public const int PartialUpdateWithIssues = 41; //Hostfiles updates partially but some might've timed out.

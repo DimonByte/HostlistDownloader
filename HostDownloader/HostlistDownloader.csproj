@@ -12,6 +12,20 @@
     <RepositoryUrl>https://github.com/DimonByte/HostlistDownloader</RepositoryUrl>
     <FileVersion>1.4.5</FileVersion>
     <AssemblyVersion>1.4.5</AssemblyVersion>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NeutralLanguage>en-GB</NeutralLanguage>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
 </Project>

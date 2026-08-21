@@ -63,12 +63,12 @@ namespace HostlistDownloader.Modules.WindowsSystem
             var whiteMatches = SearchFolder(IOManager.WhiteListFolderLocation, domain, MatchListType.Whitelist);
 
             // 2. Scan user-defined lists from settings.json
-            if (ConfigReader.Instance != null)
+            if (ConfigManager.Instance != null)
             {
-                foreach (var entry in ConfigReader.Instance.UserWebsiteBlocklist ?? [])
+                foreach (var entry in ConfigManager.Instance.UserWebsiteBlocklist ?? [])
                     CheckUserEntry(entry, domain, MatchListType.Blocklist, blockMatches);
 
-                foreach (var entry in ConfigReader.Instance.UserWebsiteWhitelist ?? [])
+                foreach (var entry in ConfigManager.Instance.UserWebsiteWhitelist ?? [])
                     CheckUserEntry(entry, domain, MatchListType.Whitelist, whiteMatches);
             }
             else

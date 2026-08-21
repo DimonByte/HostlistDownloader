@@ -39,11 +39,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         public static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
         {
             TraceLogger.Log("Starting list processing...", Enums.StatusSeverityType.Information);
-
-            string[] blockListIni = [.. ConfigReader.Instance.Blocklists];
-            string[] whiteListIni = [.. ConfigReader.Instance.Whitelist];
-            string[] userblockListIni = [.. ConfigReader.Instance.UserWebsiteBlocklist];
-            string[] userwhiteListIni = [.. ConfigReader.Instance.UserWebsiteWhitelist];
+            
+            string[] blockListIni = [.. ConfigManager.Instance.Blocklists];
+            string[] whiteListIni = [.. ConfigManager.Instance.Whitelist];
+            string[] userblockListIni = [.. ConfigManager.Instance.UserWebsiteBlocklist];
+            string[] userwhiteListIni = [.. ConfigManager.Instance.UserWebsiteWhitelist];
 
             if (blockListIni.Length == 0 && whiteListIni.Length == 0)
             {
@@ -56,7 +56,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("Blocklist is configured. Updating blocklists...");
 
                 // Reconcile sources: detect added/removed URLs individually instead of clearing everything
-                var (addedUrls, removedFileNames) = ReconcileSources(IOManager.BlockListFolderLocation, ConfigReader.Instance.Blocklists);
+                var (addedUrls, removedFileNames) = ReconcileSources(IOManager.BlockListFolderLocation, ConfigManager.Instance.Blocklists);
 
                 if (removedFileNames.Count > 0)
                 {
@@ -78,7 +78,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
             else
             {
-                TraceLogger.Log("Blocklist not configured. Ignoring");
+                TraceLogger.Log("Blocklist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
             if (userblockListIni.Length != 0)
@@ -88,13 +88,13 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
             else
             {
-                TraceLogger.Log("User Blocklist not configured. Ignoring");
+                TraceLogger.Log("User Blocklist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
             if (whiteListIni.Length != 0)
             {
                 // Reconcile sources for whitelist
-                var (wlAdded, wlRemoved) = ReconcileSources(IOManager.WhiteListFolderLocation, ConfigReader.Instance.Whitelist);
+                var (wlAdded, wlRemoved) = ReconcileSources(IOManager.WhiteListFolderLocation, ConfigManager.Instance.Whitelist);
 
                 if (wlRemoved.Count > 0)
                 {
@@ -117,7 +117,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
             else
             {
-                TraceLogger.Log("Whitelist not configured. Ignoring");
+                TraceLogger.Log("Whitelist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
             if (userwhiteListIni.Length != 0)
@@ -127,7 +127,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
             else
             {
-                TraceLogger.Log("User Whitelist not configured. Ignoring");
+                TraceLogger.Log("User Whitelist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
             if (hasUpdates)
@@ -162,7 +162,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             // If there's no manifest yet (first run), everything is "new"
             if (!File.Exists(manifestPath))
             {
-                TraceLogger.Log($"No _sources.json found in {listFolderLocation}. Treating all {currentConfigUrls.Count} URL(s) as new (first run).");
+                TraceLogger.Log($"No _sources.json found in {listFolderLocation}. Treating all {currentConfigUrls.Count} URL(s) as new (first run).", Enums.StatusSeverityType.Debug);
                 addedUrls.AddRange(currentConfigUrls);
                 return (addedUrls, removedFileNames);
             }
@@ -205,7 +205,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     addedUrls.Add(url);
                 }
             }
-            TraceLogger.Log($"Reconciliation complete for {listFolderLocation}: {addedUrls.Count} new URL(s), {removedFileNames.Count} removed URL(s).");
+            TraceLogger.Log($"Reconciliation complete for {listFolderLocation}: {addedUrls.Count} new URL(s), {removedFileNames.Count} removed URL(s).", Enums.StatusSeverityType.Debug);
             return (addedUrls, removedFileNames);
         }
 
@@ -234,7 +234,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                         File.Delete(file);
                         var etagPath = file + ".etag";
                         if (File.Exists(etagPath)) File.Delete(etagPath);
-                        TraceLogger.Log($"Cleaned up orphaned file: {fileName}");
+                        TraceLogger.Log($"Cleaned up orphaned file: {fileName}", Enums.StatusSeverityType.Debug);
                     }
                     catch (Exception ex)
                     {
@@ -250,8 +250,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             try
             {
                 IReadOnlyList<string> userDefinedLines = isBlocklist
-                    ? ConfigReader.Instance.UserWebsiteBlocklist
-                    : ConfigReader.Instance.UserWebsiteWhitelist;
+                    ? ConfigManager.Instance.UserWebsiteBlocklist
+                    : ConfigManager.Instance.UserWebsiteWhitelist;
                 TraceLogger.Log($"User defined list entry count: {userDefinedLines.Count:N0}");
 
                 // Read what's already in the compiled/downloaded combined list so we APPEND unique
@@ -309,7 +309,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
         private static async Task ProcessDownloadLists(string[] iniLocations, string ListFolderLocation, string CombinedListLocation, bool forceMode, CancellationToken cancellationToken = default, bool isRetryAttempt = false)
         {
-            TraceLogger.Log($"Starting download for INI files. ListFolderLocation: {ListFolderLocation} | CombinedListLocation: {CombinedListLocation}");
+            TraceLogger.Log($"Starting download for INI files. ListFolderLocation: {ListFolderLocation} | CombinedListLocation: {CombinedListLocation}", Enums.StatusSeverityType.Debug);
 
             var allUrls = new List<string>();
 
@@ -335,7 +335,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             DateTime startTime = DateTime.Now;
             Stopwatch watch = Stopwatch.StartNew();
             int completedCount = 0;
-            SemaphoreSlim semaphore = new(ConfigReader.Instance.MaxDownloadThreads, ConfigReader.Instance.MaxDownloadThreads);
+            SemaphoreSlim semaphore = new(ConfigManager.Instance.MaxDownloadThreads, ConfigManager.Instance.MaxDownloadThreads);
 
             List<Task> tasks = [];
             // Track per-URL outcome so we can (a) print a real summary and (b) tell CheckIntegrity which
@@ -360,10 +360,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     {
                         await semaphore.WaitAsync(cancellationToken);
                         acquired = true;
-                        TraceLogger.Log($"Added {fileName} to queue.");
-                        var outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, cancellationToken);
+                        TraceLogger.Log($"Added {fileName} to queue.", Enums.StatusSeverityType.Debug);
+                        var outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, threadCount, cancellationToken);
                         outcomes[url] = outcome;
-                        ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Downloaded {Path.GetFileName(url)}");
+                        ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Processing {Path.GetFileName(url)}");
 
                         switch (outcome)
                         {
@@ -401,7 +401,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                         if (acquired)
                         {
                             semaphore.Release();
-                            TraceLogger.Log($"{fileName} download task completed and released.");
+                            TraceLogger.Log($"Semaphore released for {fileName} download task.", Enums.StatusSeverityType.Debug);
                         }
                     }
                 }));
@@ -439,6 +439,17 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             int transientFailures = outcomes.Values.Count(o => o == DownloadOutcome.TransientFailure);
             TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)}: " +
                 $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.");
+
+            if (transientFailures > 0)
+            {
+                ProblemDuringUpdate = true;
+                TraceLogger.Log($"Some downloads failed after retries. This may succeed on a later run. Check logs for more details.", Enums.StatusSeverityType.Warning);
+            }
+            if (permanentFailures > 0)
+            {
+                ProblemDuringUpdate = true;
+                TraceLogger.Log($"Some downloads failed permanently (e.g. 404). These will be skipped in the integrity check. Please review and fix the affected URL(s) in settings.json or remove permanently offline entries.", Enums.StatusSeverityType.Warning);
+            }
 
             bool integrityOk;
             if (!HasDownloadedUpdates)
@@ -504,22 +515,22 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
                 return false;
             }
-            TraceLogger.Log($"Url Count OK, no mismatch. (URL COUNT: {urlCount} | ACCEPTABLE FILE COUNT: {fileCount})");
+            TraceLogger.Log($"Url Count OK, no mismatch. (URL Count: {urlCount} | File Count: {fileCount})");
             return true;
         }
 
         private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
         {
-            TraceLogger.Log("Integrity check started. Checking if URL count and file count match...");
+            TraceLogger.Log("Checking integrity of updated files...");
             if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
             {
                 TraceLogger.Log($"Integrity check failed due to URL and file count mismatch. Please check the logs for details.", Enums.StatusSeverityType.Error);
                 return false;
             }
-            TraceLogger.Log("Checking if combined list has been written to during update...");
+            TraceLogger.Log("Checking if combined list has been written to during update...", Enums.StatusSeverityType.Debug);
             if (new FileInfo(CombinedListLocation).Length > 0)
             {
-                TraceLogger.Log($"{CombinedListLocation} has valid file size.");
+                TraceLogger.Log($"{CombinedListLocation} has valid file size.", Enums.StatusSeverityType.Debug);
                 if (!ProblemDuringUpdate && HasDownloadedUpdates)
                 {
                     DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
@@ -531,7 +542,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 }
                 else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
                 {
-                    TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.");
+                    TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.", Enums.StatusSeverityType.Debug);
                 }
             }
             TraceLogger.Log("Integrity check complete. No issues detected.");

@@ -57,7 +57,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     try
                     {
                         Directory.CreateDirectory(dir);
-                        TraceLogger.Log($"Created directory: {dir} - First time setup will be started.");
+                        TraceLogger.Log($"Created directory: {dir} - First time setup will be started.", Enums.StatusSeverityType.Debug);
                     }
                     catch (Exception ex)
                     {
@@ -88,7 +88,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             if (!File.Exists(IOManager.SettingJsonFileLocation))
             {
                 ShowHelp = true;
-                ConfigReader.CreateDefaultConfig(IOManager.SettingJsonFileLocation);
+                ConfigManager.CreateDefaultConfig(IOManager.SettingJsonFileLocation);
             }
             if (ShowHelp)
             {
@@ -120,7 +120,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 // Stage 1: Validate public blocklist & whitelist sources
                 var validBlocklistUrls = new List<string>();
-                foreach (var url in ConfigReader.Instance.Blocklists.Select(u => u.Trim()))
+                foreach (var url in ConfigManager.Instance.Blocklists.Select(u => u.Trim()))
                 {
                     if (!string.IsNullOrEmpty(url) && (Uri.TryCreate(url, UriKind.Absolute, out _) || urlOrDomainRegex.IsMatch(url)))
                     {
@@ -134,7 +134,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
 
                 var validWhitelistUrls = new List<string>();
-                foreach (var url in ConfigReader.Instance.Whitelist.Select(u => u.Trim()))
+                foreach (var url in ConfigManager.Instance.Whitelist.Select(u => u.Trim()))
                 {
                     if (!string.IsNullOrEmpty(url) && (Uri.TryCreate(url, UriKind.Absolute, out _) || urlOrDomainRegex.IsMatch(url)))
                     {
@@ -149,7 +149,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 // Stage 2: Validate user-defined website domains
                 var validUserBlocklistDomains = new List<string>();
-                foreach (var domain in ConfigReader.Instance.UserWebsiteBlocklist.Select(d => d.Trim()))
+                foreach (var domain in ConfigManager.Instance.UserWebsiteBlocklist.Select(d => d.Trim()))
                 {
                     if (!string.IsNullOrEmpty(domain) && domainRegex.IsMatch(domain))
                     {
@@ -163,7 +163,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
 
                 var validUserWhitelistDomains = new List<string>();
-                foreach (var domain in ConfigReader.Instance.UserWebsiteWhitelist.Select(d => d.Trim()))
+                foreach (var domain in ConfigManager.Instance.UserWebsiteWhitelist.Select(d => d.Trim()))
                 {
                     if (!string.IsNullOrEmpty(domain) && domainRegex.IsMatch(domain))
                     {
@@ -183,11 +183,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     {
                         Blocklists = [.. validBlocklistUrls],
                         Whitelist = [.. validWhitelistUrls],
-                        Formattype = ConfigReader.Instance.Formattype,
+                        Formattype = ConfigManager.Instance.Formattype,
                         UserWebsiteBlocklist = [.. validUserBlocklistDomains],
                         UserWebsiteWhitelist = [.. validUserWhitelistDomains],
-                        MaxDownloadThreads = ConfigReader.Instance.MaxDownloadThreads,
-                        LogExpiryInDays = ConfigReader.Instance.LogExpiryInDays
+                        MaxDownloadThreads = ConfigManager.Instance.MaxDownloadThreads,
+                        LogExpiryInDays = ConfigManager.Instance.LogExpiryInDays
                     };
 
                     var options = new JsonSerializerOptions
@@ -207,7 +207,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
                 else
                 {
-                    TraceLogger.Log("Configuration corruption check completed. No issues found.");
+                    TraceLogger.Log("Configuration corruption check completed. No issues found.", Enums.StatusSeverityType.Debug);
                 }
             }
             catch (Exception ex)

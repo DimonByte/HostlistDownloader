@@ -30,77 +30,54 @@ using System.Reflection;
 
 Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
 Stopwatch watch = Stopwatch.StartNew();
-Directory.SetCurrentDirectory(AppContext.BaseDirectory); //Fixes issue where if the user runs the program from a different directory path in their terminal it will attempt to run with an invalid location.
+
+// --- PARSE ARGUMENTS ---
+ArgumentResult argsResult;
+try
+{
+    argsResult = ArgumentParser.Parse(args);
+    // Apply immediate side effects (Quiet mode, Help, Purge)
+    ArgumentParser.ApplySideEffects(argsResult);
+    TraceLogger.DebugMode = argsResult.DebugMode ?? false;
+}
+catch (ArgumentException ex)
+{
+    TraceLogger.Log(ex.Message, Enums.StatusSeverityType.Error, ErrorCodes.InvalidConfigEntry);
+    Environment.Exit(ErrorCodes.InvalidConfigEntry);
+    return; //Although the environment exits, the return here prevents "Use of unassigned local variable 'argsResult'" error in solution error check.
+}
+
+// Handle Search Command separately
+if (argsResult.SearchDomain != null)
+{
+    SearchManager.Search(argsResult.SearchDomain);
+    return;
+}
+
+// Set current directory to application base directory
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
+// Initialize necessary files/directories and config
 IOManager.CreateNecessaryDirectoriesAndFiles();
-ConfigReader.Init(IOManager.SettingJsonFileLocation);
+ConfigManager.Init(IOManager.SettingJsonFileLocation);
 IOManager.CheckForInvalidConfig();
+
+// Check network availability
 if (!NetworkChecker.IsNetworkAvailable())
 {
     TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ErrorCodes.NetworkConnectionFailed);
 }
 
-bool fresh = false;
-
-List<string> remainingArgs = [];
-string? searchDomain = null;
-
-for (int i = 0; i < args.Length; i++)
-{
-    string arg = args[i];
-
-    if (arg == "/quiet" || arg == "/q")
-    {
-        TraceLogger.QuietMode = true;
-        TraceLogger.Log("/quiet enabled. Console output will be suppressed.");
-    }
-    else if (arg == "/fresh" || arg == "/fr")
-    {
-        TraceLogger.Log("/fresh enabled. Clearing block and white list folders...");
-        IOManager.ClearTempFiles(IOManager.BlockListFolderLocation);
-        IOManager.ClearTempFiles(IOManager.WhiteListFolderLocation);
-        IOManager.ClearTempFiles(IOManager.CombinedListFolderLocation);
-        fresh = true;
-    }
-    else if (arg == "/search" || arg == "/s")
-    {
-        if (i + 1 >= args.Length || args[i + 1].StartsWith('/'))
-        {
-            TraceLogger.Log("/search requires a domain argument, e.g. /search example.com", Enums.StatusSeverityType.Error);
-            Environment.Exit(ErrorCodes.InvalidConfigEntry);
-        }
-        searchDomain = args[i + 1];
-        i++; // consume the domain token so it isn't also treated as a separate arg
-    }
-    else if (arg == "/purge" || arg == "/p")
-    {
-        TraceLogger.Log("/purge enabled. Deleting all logs...");
-        TraceLogger.PurgeAllLogs();
-    }
-    else if (arg == "/help" || arg == "/h" || arg == "/?")
-    {
-        Console.WriteLine("HostlistDownloader Help:");
-        Console.WriteLine("/quiet or /q: Suppresses console output.");
-        Console.WriteLine("/fresh or /fr: Clears block and white list folders before updating. Useful for troubleshooting.");
-        Console.WriteLine("/search <domain> or /s <domain>: Searches for a specific domain in the hostlists.");
-        Console.WriteLine("/purge or /p: Deletes all log files.");
-        Console.WriteLine("/help or /h: Displays this help message.");
-        Environment.Exit(0);
-    }
-    else
-    {
-        remainingArgs.Add(arg);
-    }
-}
-if (searchDomain != null)
-{
-    SearchManager.Search(searchDomain);
-    return;
-}
+// Clear expired logs before main processing
 TraceLogger.ClearExpiredLogs();
 
-HostListManager.StartListProcessing(fresh); //Main Update Loop
+// Execute Main Update Loop
+bool freshMode = argsResult.IsFresh;
+HostListManager.StartListProcessing(freshMode);
 
 watch.Stop();
+
+// Handle Post-Update Status
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
     TraceLogger.Log($"[UPDATED] Hostfiles updated successfully in {watch.Elapsed.TotalSeconds} seconds.");
@@ -114,10 +91,11 @@ else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedU
 {
     TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (time taken: {watch.Elapsed.TotalSeconds} seconds.)");
 }
-else //Problem and no downloads
+else // Problem and no downloads
 {
     TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
+
 Console.BackgroundColor = ConsoleColor.Black;
 Console.ForegroundColor = ConsoleColor.White;

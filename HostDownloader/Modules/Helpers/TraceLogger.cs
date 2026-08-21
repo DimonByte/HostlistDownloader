@@ -34,6 +34,7 @@ namespace HostlistDownloader.Modules.Helpers
         /// When true, suppresses Console output (log file writing is unaffected). Set via the /quiet argument.
         /// </summary>
         public static bool QuietMode = false;
+        public static bool DebugMode = false;
 
         private static readonly Lock _lock = new();
         private static readonly string _logDirectory = IOManager.LogsLocation;
@@ -61,7 +62,7 @@ namespace HostlistDownloader.Modules.Helpers
                     int expiryDays = 7;
                     try
                     {
-                        expiryDays = ConfigReader.Instance.LogExpiryInDays;
+                        expiryDays = ConfigManager.Instance.LogExpiryInDays;
                     }
                     catch (InvalidOperationException)
                     {
@@ -91,11 +92,11 @@ namespace HostlistDownloader.Modules.Helpers
                               [CallerMemberName] string memberName = "",
                               [CallerLineNumber] int lineNumber = 0)
         {
-
             if (string.IsNullOrEmpty(message))
             {
-                Log($"The function {memberName} has called the TraceLogger.Log at line {lineNumber} but hasn't defined any of the log variables! That class may be malfunctioning.", StatusSeverityType.Warning);
+                Log($"Class Malfunction Warning: The function {memberName} has called the TraceLogger.Log at line {lineNumber} but hasn't defined any of the log variables!", StatusSeverityType.Warning);
             }
+
             string logEntry = string.Empty;
             string filePathLog = Path.Combine(_logDirectory, $"{_currentDate}.log");
             try
@@ -110,53 +111,51 @@ namespace HostlistDownloader.Modules.Helpers
                 string timestamp = now.ToString("yyyy-MM-dd HH:mm:ss.fff");
                 string severityText = severity.ToString().ToUpper();
                 string processID = Environment.ProcessId.ToString();
-                logEntry = $"[{timestamp}] [PID: {processID}] [{severityText}] [{memberName}]({lineNumber}): {message}";
+
+                if (DebugMode)
+                {
+                    logEntry = $"[{timestamp}] [PID: {processID}] [{severityText}] [{memberName}]({lineNumber}): {message}";
+                }
+                else
+                {
+                    logEntry = $"[{timestamp}] [{severityText}] {message}";
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to prepare log entry: {ex}");
             }
 
-            // Apply color coding based on severity. Errors, warnings and fatal messages are always shown
-            // even in QuietMode, since quiet mode is meant to suppress routine noise, not important issues.
-            bool suppressConsole = QuietMode && severity is StatusSeverityType.Information or StatusSeverityType.Debug;
-            if (!suppressConsole)
+            // 1. Determine console output behavior explicitly
+            bool suppressedByQuietMode = QuietMode && (severity is StatusSeverityType.Information or StatusSeverityType.Debug);
+            bool suppressedByDebugMode = !DebugMode && severity == StatusSeverityType.Debug;
+            bool shouldPrintToConsole = !suppressedByQuietMode && !suppressedByDebugMode;
+
+            // 2. Handle console output (if allowed)
+            if (shouldPrintToConsole)
             {
                 ConsoleColor originalForeground = Console.ForegroundColor;
                 ConsoleColor originalBackground = Console.BackgroundColor;
-
                 try
                 {
                     switch (severity)
                     {
-                        case StatusSeverityType.Information:
-                            Console.ForegroundColor = ConsoleColor.White;
-                            break;
-                        case StatusSeverityType.Warning:
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            break;
-                        case StatusSeverityType.Error:
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            break;
-                        case StatusSeverityType.Fatal:
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.BackgroundColor = ConsoleColor.Red;
-                            break;
-                        default:
-                            Console.ForegroundColor = ConsoleColor.Gray;
-                            break;
+                        case StatusSeverityType.Information: Console.ForegroundColor = ConsoleColor.White; break;
+                        case StatusSeverityType.Warning: Console.ForegroundColor = ConsoleColor.Yellow; break;
+                        case StatusSeverityType.Error: Console.ForegroundColor = ConsoleColor.Red; break;
+                        case StatusSeverityType.Fatal: Console.ForegroundColor = ConsoleColor.White; Console.BackgroundColor = ConsoleColor.Red; break;
+                        default: Console.ForegroundColor = ConsoleColor.Gray; break;
                     }
-
                     Console.WriteLine(logEntry);
                 }
                 finally
                 {
-                    // Reset console colors to original values
                     Console.ForegroundColor = originalForeground;
                     Console.BackgroundColor = originalBackground;
                 }
             }
 
+            // 3. Write to file (unaffected by DebugMode or QuietMode)
             lock (_lock)
             {
                 try
@@ -168,6 +167,7 @@ namespace HostlistDownloader.Modules.Helpers
                     Debug.WriteLine($"Failed to write to log: {ex}");
                 }
             }
+
             if (severity == StatusSeverityType.Fatal)
             {
                 Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ErrorCodes.GetDescription(PassedErrorCode)}) - HostDirectory must exit. Trace Message: {logEntry}", StatusSeverityType.Error);
