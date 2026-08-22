@@ -35,7 +35,7 @@ namespace HostlistDownloader.Modules
         public const int DirectoryCreationFailed = 10;
 
         // Configuration errors
-        public const int ConfigurationFileMissing = 20;
+        public const int FileMissing = 20;
         public const int ConfigurationCorrupted = 21;
         public const int InvalidConfigEntry = 22; //Configuration file is present, but the attempt to use configuration failed.
 
@@ -58,7 +58,7 @@ namespace HostlistDownloader.Modules
                 GeneralError => "General error occurred",
                 NetworkConnectionFailed => "Network connection failed",
                 DirectoryCreationFailed => "Failed to create directory",
-                ConfigurationFileMissing => "Critical configuration file missing",
+                FileMissing => "Critical configuration file missing",
                 ConfigurationCorrupted => "Configuration file corruption detected",
                 InvalidConfigEntry => "Invalid configuration entry detected",
                 UpdateProcessError => "Error during update process",

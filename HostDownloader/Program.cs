@@ -38,7 +38,7 @@ try
     argsResult = ArgumentParser.Parse(args);
     // Apply immediate side effects (Quiet mode, Help, Purge)
     ArgumentParser.ApplySideEffects(argsResult);
-    TraceLogger.DebugMode = argsResult.DebugMode ?? false;
+    TraceLogger.DebugMode = argsResult.DebugMode;
 }
 catch (ArgumentException ex)
 {

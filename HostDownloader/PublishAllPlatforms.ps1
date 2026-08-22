@@ -10,33 +10,51 @@ $runtimes = @(
 $baseName = "HostDownloader"
 
 foreach ($rid in $runtimes) {
-
-    $outputDir = "./publish/$rid"
+    Write-Host "--- Publishing for $rid ---" -ForegroundColor Cyan
     
-    # Appends the platform directly to the binary name
+    $outputDir = "./publish/$rid"
     $customName = "$baseName-$rid"
 
-    dotnet publish `
-        -c Release `
-        -f net10.0 `
-        -r $rid `
-        --self-contained true `
-        -p:PublishSingleFile=true `
-        -p:PublishTrimmed=true `
-        -p:AssemblyName=$customName `
-        -o $outputDir
+    $dotnetArgs = @(
+        "publish",
+        "-c Release",
+        "-f net10.0",
+        "-r $rid",
+        "--self-contained true",
+        "-p:PublishSingleFile=true",
+        "-p:PublishTrimmed=true",
+        "-p:AssemblyName=$customName",
+        "-o $outputDir"
+    )
 
-    # Generate checksums for all files in the publish folder
-    Get-ChildItem $outputDir -File | ForEach-Object {
-        # Skip hashing files that are already checksums
-        if ($_.Extension -eq ".sha256") { return }
+    $process = Start-Process -FilePath "dotnet" -ArgumentList $dotnetArgs -NoNewWindow -Wait -PassThru
 
-        $hash = Get-FileHash $_.FullName -Algorithm SHA256
-
-        # Names it 'HostDownloader-linux-x64.sha256' or similar
-        $checksumFile = "$($_.FullName).sha256"
-
-        "$($hash.Hash)  $($_.Name)" |
-            Out-File $checksumFile -Encoding ascii
+    if ($process.ExitCode -ne 0) {
+        Write-Host "Build failed for $rid (Exit Code: $($process.ExitCode)). Skipping." -ForegroundColor Red
+        continue
     }
+
+    Write-Host "Build successful for $rid." -ForegroundColor Green
+
+    if (-not (Test-Path "./publish")) {
+        New-Item -ItemType Directory -Path "./publish" | Out-Null
+    }
+
+    $exeFiles = Get-ChildItem -Path $outputDir -Filter "*.exe" -File
+    if ($exeFiles.Count -gt 0) {
+        foreach ($file in $exeFiles) {
+            $destPath = Join-Path "./publish" $file.Name
+            try {
+                Move-Item -Path $file.FullName -Destination $destPath -Force
+                Write-Host "Moved $($file.Name) to ./publish/" -ForegroundColor DarkGray
+            }
+            catch {
+                Write-Warning "Failed to move $($file.Name): $_"
+            }
+        }
+    } else {
+        Write-Host "No .exe files found in $outputDir (expected for non-Windows RIDs)." -ForegroundColor Yellow
+    }
+
+    Write-Host "--- Done with $rid ---" -ForegroundColor Green
 }

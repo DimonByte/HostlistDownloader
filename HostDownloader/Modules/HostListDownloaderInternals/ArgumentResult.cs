@@ -15,6 +15,9 @@
         string? RemoveUserBlockDomain,
         string? AddUserAllowDomain,
         string? RemoveUserAllowDomain,
-        bool? DebugMode
+        bool DebugMode,
+        bool CheckDuplicate,
+        string? GetSourceName,
+        string? AnalyseDuplicateSource
     );
 }

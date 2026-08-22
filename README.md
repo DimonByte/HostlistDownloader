@@ -125,9 +125,9 @@ The `formattype` key controls how every entry in the combined output file is for
 | **[0x1] (1)** | General error occurred. | Non-specific issue requiring review of the detailed log file. |
 | **[0x2] (2)** | Network connection failed. | Could not establish a necessary network connection to complete the required downloads/tasks. |
 | **[0xA] (10)** | Directory creation failed. | Check permissions. Ensure security software is not blocking folder access. |
-| **[0x14] (20)** | Config file missing. | The critical `settings.json` file was not found or accessible. |
+| **[0x14] (20)** | File missing. | A configuration file or a file needed for HostlistDownloader to run was not found or accessible. |
 | **[0x15] (21)** | Config corruption detected. | The settings file structure or content is invalid and cannot be read properly. |
-| **[0x16] (22)** | Invalid configuration entry. | A key or value within `settings.json` could not be understood or used correctly (e.g., misspellings). |
+| **[0x16] (22)** | Invalid configuration entry. | A key or value within `settings.json` or another configuration file could not be understood or used correctly (e.g., misspellings). |
 | **[0x1E] (30)** | Missing parameters. | One or more required arguments were omitted from the command. |
 | **[0x28] (40)** | Error during update process. | A failure occurred during the full host file update operation (e.g., network outage during batch update). |
 | **[0x29] (41)** | Update completed with issues. | The process ran partially; some entries may have timed out or failed to write. |

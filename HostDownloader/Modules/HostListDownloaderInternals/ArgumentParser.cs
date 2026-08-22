@@ -38,6 +38,9 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 /purge or /p: Deletes all log files.
 /help or /h or /?: Displays this help message.
 /debug: Enables debug mode for detailed logging.
+/duplicatescan or /dupscan: Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files.
+/dupanalyse or /analysedup: Analyses duplicate entries in the hostlists.
+/getsource <source_name> or /gs <source_name>: Retrieves the source name for a given hostlist file name.
 --Hostlist rules-- (For blocklist/whitelist management)
 /addblocklist <url> or /ab <url>: Add a blocklist source.
 /removeblocklist <url> or /rb <url>: Remove a blocklist source.
@@ -69,7 +72,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             string? removeUserBlockDomain = null;
             string? addUserAllowDomain = null;
             string? removeUserAllowDomain = null;
-            bool? debugMode = null;
+            bool debugMode = false;
+            bool checkDuplicates = false;
+            string? getSourceName = null;
+            string? analyseDuplicateSource = null;
 
             List<string> remainingArgs = [];
 
@@ -80,6 +86,26 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 // Helper to check if next arg is valid value (not a flag)
                 bool HasNextArg() => i + 1 < args.Length && !args[i + 1].StartsWith('/');
                 string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
+
+                if (arg.Equals("/analysedup", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/dupanalyse", StringComparison.OrdinalIgnoreCase))
+                {
+                    analyseDuplicateSource = GetNextArg();
+                    i++;
+                }
+
+                if (arg.Equals("/getsource", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/gs", StringComparison.OrdinalIgnoreCase))
+                {
+                    getSourceName = GetNextArg();
+                    i++;
+                }
+
+                if (arg.Equals("/duplicate", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/dup", StringComparison.OrdinalIgnoreCase))
+                {
+                    checkDuplicates = true;
+                }
 
                 if (arg.Equals("/debug", StringComparison.OrdinalIgnoreCase))
                 {
@@ -198,7 +224,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 RemoveUserBlockDomain: removeUserBlockDomain,
                 AddUserAllowDomain: addUserAllowDomain,
                 RemoveUserAllowDomain: removeUserAllowDomain,
-                DebugMode: debugMode
+                DebugMode: debugMode,
+                CheckDuplicate: checkDuplicates,
+                GetSourceName: getSourceName,
+                AnalyseDuplicateSource: analyseDuplicateSource
             );
         }
         public static void PrintHelp()
@@ -227,6 +256,69 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (result.ShowHelp)
             {
                 PrintHelp();
+                Environment.Exit(0);
+            }
+
+            if (result.CheckDuplicate)
+            {
+                TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    HostListManager.RunDuplicateCheck();
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to run duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
+            if (result.AnalyseDuplicateSource != null)
+            {
+                TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
+                try
+                {
+                    HostListManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
+                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to analyse duplicates: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
+            if (result.GetSourceName != null)
+            {
+                TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
+                try
+                {
+                    //Check if it exists in blocklist or whitelist folders
+                    if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
+                        !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
+                        Environment.Exit(1);
+                    }
+                    else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
+                        string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
+                        string sourceName = HostListManager.GetSourceNameForFile(result.GetSourceName, true);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                    }
+                    else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
+                        string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
+                        string sourceName = HostListManager.GetSourceNameForFile(result.GetSourceName, false);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to retrieve source: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
                 Environment.Exit(0);
             }
 
