@@ -39,8 +39,9 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 /help or /h or /?: Displays this help message.
 /debug: Enables debug mode for detailed logging.
 /duplicatescan or /dupscan: Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files.
-/dupanalyse or /analysedup: Analyses duplicate entries in the hostlists.
+/dupanalyse <source_name> or /analysedup <source_name>: Analyses duplicate entries in the hostlists.
 /getsource <source_name> or /gs <source_name>: Retrieves the source name for a given hostlist file name.
+/merge or /regenerate or /re: Merges all hostlist files and user defined rules into a single consolidated hostlist file WITHOUT going to the internet. Useful for offline use or when user has updated their own user-defined rules and wants to generate a new consolidated hostlist without downloading anything.
 --Hostlist rules-- (For blocklist/whitelist management)
 /addblocklist <url> or /ab <url>: Add a blocklist source.
 /removeblocklist <url> or /rb <url>: Remove a blocklist source.
@@ -76,6 +77,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             bool checkDuplicates = false;
             string? getSourceName = null;
             string? analyseDuplicateSource = null;
+            bool mergeMode = false;
 
             List<string> remainingArgs = [];
 
@@ -86,6 +88,13 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 // Helper to check if next arg is valid value (not a flag)
                 bool HasNextArg() => i + 1 < args.Length && !args[i + 1].StartsWith('/');
                 string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
+
+                if (arg.Equals("/merge", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/regenerate", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/re", StringComparison.OrdinalIgnoreCase))
+                {
+                    mergeMode = true;
+                }
 
                 if (arg.Equals("/analysedup", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/dupanalyse", StringComparison.OrdinalIgnoreCase))
@@ -227,7 +236,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 DebugMode: debugMode,
                 CheckDuplicate: checkDuplicates,
                 GetSourceName: getSourceName,
-                AnalyseDuplicateSource: analyseDuplicateSource
+                AnalyseDuplicateSource: analyseDuplicateSource,
+                MergeMode: mergeMode
             );
         }
         public static void PrintHelp()
@@ -241,6 +251,17 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         /// <param name="result">The parsed result.</param>
         public static void ApplySideEffects(ArgumentResult result)
         {
+            if (result.MergeMode)
+            {
+                HostListManager.StartOfflineListProcessing();
+            }
+            
+            if (result.DebugMode)
+            {
+                TraceLogger.DebugMode = true;
+                TraceLogger.Log("/debug enabled. Debug mode is active.", Enums.StatusSeverityType.Debug);
+            }
+
             if (result.IsQuiet)
             {
                 TraceLogger.QuietMode = true;

@@ -54,6 +54,9 @@ To configure a task schedule to run silently, set up the task using the followin
 | | `/purge` or `/p` | (None) | Deletes all log files. |
 | | `/help` or `/h` or `/?` | (None) | Displays this help message. |
 | | `/debug` | (None) | Enables debug mode for detailed logging. |
+| | `/duplicatescan` or `/dupscan` | (None) | Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files. |
+| | `/dupanalyse` or `/analysedup` | <source_file_name> | Analyses duplicate entries in the hostlists. |
+| | `/getsource` or `/gs` | <source_file_name> | Retrieves the source name for a given hostlist file name. |
 | **Hostlist Management** | `/addblocklist <url>` or `/ab <url>` | `<url>` | Add a blocklist source URL. |
 | | `/removeblocklist <url>` or `/rb <url>` | `<url>` | Remove a blocklist source URL. |
 | | `/addwhitelist <url>` or `/aw <url>` | `<url>` | Add a whitelist source URL. |

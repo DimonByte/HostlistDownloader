@@ -139,6 +139,51 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             TraceLogger.Log("Host lists update completed!");
         }
 
+        public static void StartOfflineListProcessing()
+        {
+            string[] blockListIni = [.. ConfigManager.Instance.Blocklists];
+            string[] whiteListIni = [.. ConfigManager.Instance.Whitelist];
+            string[] userblockListIni = [.. ConfigManager.Instance.UserWebsiteBlocklist];
+            string[] userwhiteListIni = [.. ConfigManager.Instance.UserWebsiteWhitelist];
+            TraceLogger.Log("Starting offline list processing...", Enums.StatusSeverityType.Information);
+
+            if (blockListIni.Length == 0 && whiteListIni.Length == 0)
+            {
+                TraceLogger.Log("Blocklist and Whitelist config are not configured.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
+                return;
+            }
+            if (blockListIni.Length != 0)
+            {
+                TraceLogger.Log("Blocklist is configured. Merging...");
+                CompileList(IOManager.BlockListFolderLocation, IOManager.CombinedBlockListFileLocation, blockListIni.Length, 0, DateTime.Now);
+            }
+            else
+            {
+                TraceLogger.Log("Blocklist not configured. Ignoring", Enums.StatusSeverityType.Debug);
+            }
+            if (whiteListIni.Length != 0)
+            {
+                TraceLogger.Log("Whitelist is configured. Merging user config...");
+                CompileList(IOManager.WhiteListFolderLocation, IOManager.CombinedWhiteListFileLocation, whiteListIni.Length, 0, DateTime.Now);
+            }
+            else
+            {
+                TraceLogger.Log("Whitelist not configured. Ignoring", Enums.StatusSeverityType.Debug);
+            }
+
+            if (userwhiteListIni.Length != 0)
+            {
+                TraceLogger.Log("User Whitelist is configured. Merging user config...");
+                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocation, isBlocklist: false);
+            }
+            else
+            {
+                TraceLogger.Log("User Whitelist not configured. Ignoring", Enums.StatusSeverityType.Debug);
+            }
+
+            GenerateCombinedList();
+        }
+
         /// <summary>
         /// Compares the previous run's _sources.json manifest against the current configuration
         /// to identify which URLs were added or removed since the last run.
@@ -487,7 +532,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             await ProcessDownloadLists(iniLocations, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
         }
 
-        private static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
+        public static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
         {
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
@@ -522,7 +567,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
         private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
         {
-            TraceLogger.Log("Checking integrity of updated files...");
+            TraceLogger.Log("Checking integrity of host files...");
             if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
             {
                 TraceLogger.Log($"Integrity check failed due to URL and file count mismatch. Please check the logs for details.", Enums.StatusSeverityType.Error);

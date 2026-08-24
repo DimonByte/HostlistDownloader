@@ -31,6 +31,14 @@ using System.Reflection;
 Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
 Stopwatch watch = Stopwatch.StartNew();
 
+// Set current directory to application base directory
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
+// Initialize necessary files/directories and config
+IOManager.CreateNecessaryDirectoriesAndFiles();
+ConfigManager.Init(IOManager.SettingJsonFileLocation);
+IOManager.CheckForInvalidConfig();
+
 // --- PARSE ARGUMENTS ---
 ArgumentResult argsResult;
 try
@@ -53,14 +61,6 @@ if (argsResult.SearchDomain != null)
     SearchManager.Search(argsResult.SearchDomain);
     return;
 }
-
-// Set current directory to application base directory
-Directory.SetCurrentDirectory(AppContext.BaseDirectory);
-
-// Initialize necessary files/directories and config
-IOManager.CreateNecessaryDirectoriesAndFiles();
-ConfigManager.Init(IOManager.SettingJsonFileLocation);
-IOManager.CheckForInvalidConfig();
 
 // Check network availability
 if (!NetworkChecker.IsNetworkAvailable())

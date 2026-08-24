@@ -18,6 +18,7 @@
         bool DebugMode,
         bool CheckDuplicate,
         string? GetSourceName,
-        string? AnalyseDuplicateSource
+        string? AnalyseDuplicateSource,
+        bool MergeMode
     );
 }
