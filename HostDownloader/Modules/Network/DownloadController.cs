@@ -60,17 +60,29 @@ namespace HostlistDownloader.Modules.Network
         {
             string WorkingOnName = Path.GetFileName(url);
             TraceLogger.Log($"{fileID} - {WorkingOnName} | Checking {url}...", Enums.StatusSeverityType.Debug);
-            if (string.IsNullOrEmpty(url))
+            if (string.IsNullOrWhiteSpace(url))
             {
                 TraceLogger.Log($"{fileID} - {WorkingOnName} | URL is null or empty", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
-            if (string.IsNullOrEmpty(localPath))
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                TraceLogger.Log($"{fileID} - {WorkingOnName} | Invalid URL scheme or format: {url}", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+            if (string.IsNullOrWhiteSpace(localPath))
             {
                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Local path is null or empty", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
-            string metadataPath1 = localPath + ".etag";
+            string normalizedLocalPath = Path.GetFullPath(localPath);
+            if (normalizedLocalPath.Contains(".."))
+            {
+                TraceLogger.Log($"{fileID} - {WorkingOnName} | Path traversal detected in local path: {localPath}", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+            WorkingOnName = Path.GetFileName(normalizedLocalPath);
+            string metadataPath1 = normalizedLocalPath + ".etag";
             if (File.Exists(metadataPath1))
             {
                 TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag exists, checking online version...", Enums.StatusSeverityType.Debug);
@@ -86,7 +98,7 @@ namespace HostlistDownloader.Modules.Network
 
                         if (!string.IsNullOrEmpty(eTag) && !string.IsNullOrEmpty(storedETag) && eTag == storedETag && !forceMode)
                         {
-                            if (!File.Exists(localPath)) //Check if host file doesn't exist, but etag does.
+                            if (!File.Exists(normalizedLocalPath)) //Check if host file doesn't exist, but etag does.
                             {
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag exists but the host file is missing. proceeding with download.");
                             }
@@ -116,8 +128,8 @@ namespace HostlistDownloader.Modules.Network
             {
                 try
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Downloading to {localPath} (Attempt {attempt}/{MaxRetries})...");
-                    string? directory = Path.GetDirectoryName(localPath);
+                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Downloading to {normalizedLocalPath} (Attempt {attempt}/{MaxRetries})...");
+                    string? directory = Path.GetDirectoryName(normalizedLocalPath);
                     if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     {
                         Directory.CreateDirectory(directory);
@@ -134,7 +146,15 @@ namespace HostlistDownloader.Modules.Network
                         long? contentLength = response.Content.Headers.ContentLength;
                         byte[] contentBytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
                         bool isGzipped = response.Content.Headers.ContentEncoding?.Any(e => e.Contains("gzip")) ?? false;
-                        using var fileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
+                        if (File.Exists(normalizedLocalPath) && !File.GetAttributes(normalizedLocalPath).HasFlag(FileAttributes.Directory))
+                        {
+                            if (File.GetAttributes(normalizedLocalPath).HasFlag(FileAttributes.ReparsePoint))
+                            {
+                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Target path is a symbolic link or reparse point. Aborting.", Enums.StatusSeverityType.Error);
+                                return DownloadOutcome.PermanentFailure;
+                            }
+                        }
+                        using var fileStream = new FileStream(normalizedLocalPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
                         if (isGzipped)
                         {
                             TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressing GZip...", Enums.StatusSeverityType.Debug);
@@ -143,6 +163,12 @@ namespace HostlistDownloader.Modules.Network
                             if (contentLength.HasValue)
                             {
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressing {contentLength.Value} bytes of GZip data...", Enums.StatusSeverityType.Debug);
+                            }
+                            //Check if decompressedSize is too large. Crash if it is. This is a safety check to prevent decompression bombs.
+                            if (decompressedStream.CanSeek && decompressedStream.Length > 100 * 1024 * 1024) // 100 MB limit
+                            {
+                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressed size exceeds limit of 100 MB. Aborting download to prevent decompression bombs.", Enums.StatusSeverityType.Error);
+                                return DownloadOutcome.PermanentFailure;
                             }
                             await decompressedStream.CopyToAsync(fileStream, cts.Token).ConfigureAwait(false);
                         }
@@ -158,9 +184,9 @@ namespace HostlistDownloader.Modules.Network
                         }
                         if (response.Headers.ETag != null && !string.IsNullOrEmpty(response.Headers.ETag.Tag))
                         {
-                            string metadataPath = localPath + ".etag";
+                            string metadataPath = normalizedLocalPath + ".etag";
                             await File.WriteAllTextAsync(metadataPath, response.Headers.ETag.Tag, cancellationToken).ConfigureAwait(false);
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag stored with file: {response.Headers.ETag.Tag}");
+                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag stored with file: {response.Headers.ETag.Tag}",Enums.StatusSeverityType.Debug);
                         }
                         else
                         {
