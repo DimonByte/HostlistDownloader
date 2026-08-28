@@ -40,7 +40,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
         public static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
         {
-            TraceLogger.Log("Starting list processing...", Enums.StatusSeverityType.Information);
+            TraceLogger.Log($"Starting list processing... Fresh Mode: {forceMode}", Enums.StatusSeverityType.Information);
 
             string[] blockListIni = [.. ConfigManager.Instance.Blocklists];
             string[] whiteListIni = [.. ConfigManager.Instance.Whitelist];
@@ -405,8 +405,23 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             foreach (var url in allUrls)
             {
                 var threadCount = ++completedCount;
-                var fileName = $"{threadCount} - {Path.GetFileName(url)}";
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    TraceLogger.Log($"Invalid or non-HTTP(S) URL skipped: {url}", Enums.StatusSeverityType.Warning);
+                    continue;
+                }
+
+                var safeFileName = string.Join("_", uri.LocalPath.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+                var fileName = $"{threadCount} - {safeFileName}";
                 var filePath = Path.Combine(ListFolderLocation, fileName);
+
+                if (!filePath.StartsWith(ListFolderLocation, StringComparison.OrdinalIgnoreCase))
+                {
+                    TraceLogger.Log($"Path traversal attempt blocked: {url}", Enums.StatusSeverityType.Error);
+                    continue;
+                }
+
                 sourceManifest[fileName] = url;
 
                 tasks.Add(Task.Run(async () =>

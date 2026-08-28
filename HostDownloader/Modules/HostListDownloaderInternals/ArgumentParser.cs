@@ -21,6 +21,7 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
 
 namespace HostlistDownloader.Modules.HostListDownloaderInternals
@@ -42,6 +43,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 /dupanalyse <source_name> or /analysedup <source_name>: Analyses duplicate entries in the hostlists.
 /getsource <source_name> or /gs <source_name>: Retrieves the source name for a given hostlist file name.
 /merge or /regenerate or /re: Merges all hostlist files and user defined rules into a single consolidated hostlist file WITHOUT going to the internet. Useful for offline use or when user has updated their own user-defined rules and wants to generate a new consolidated hostlist without downloading anything.
+/update: Checks for updates to the HostlistDownloader application and notifies if a newer version is available.
 --Hostlist rules-- (For blocklist/whitelist management)
 /addblocklist <url> or /ab <url>: Add a blocklist source.
 /removeblocklist <url> or /rb <url>: Remove a blocklist source.
@@ -78,6 +80,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             string? getSourceName = null;
             string? analyseDuplicateSource = null;
             bool mergeMode = false;
+            bool updateCheck = false;
 
             List<string> remainingArgs = [];
 
@@ -88,6 +91,13 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 // Helper to check if next arg is valid value (not a flag)
                 bool HasNextArg() => i + 1 < args.Length && !args[i + 1].StartsWith('/');
                 string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
+
+                TraceLogger.Log($"Processing argument: {arg}", Enums.StatusSeverityType.Debug);
+
+                if (arg.Equals("/update", StringComparison.OrdinalIgnoreCase))
+                {
+                    updateCheck = true;
+                }
 
                 if (arg.Equals("/merge", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/regenerate", StringComparison.OrdinalIgnoreCase) ||
@@ -224,7 +234,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 ShouldPurgeLogs: shouldPurgeLogs,
                 RemainingArgs: remainingArgs,
                 ShowHelp: showHelp,
-                // Pass the new values to the result object
                 AddBlocklistUrl: addBlocklistUrl,
                 RemoveBlocklistUrl: removeBlocklistUrl,
                 AddWhitelistUrl: addWhitelistUrl,
@@ -237,7 +246,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 CheckDuplicate: checkDuplicates,
                 GetSourceName: getSourceName,
                 AnalyseDuplicateSource: analyseDuplicateSource,
-                MergeMode: mergeMode
+                MergeMode: mergeMode,
+                UpdateCheck: updateCheck
             );
         }
         public static void PrintHelp()
@@ -256,6 +266,20 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 HostListManager.StartOfflineListProcessing();
             }
             
+            if (result.UpdateCheck)
+            {
+                TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    UpdateChecker.IsUpdateAvailable();
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to check for updates: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
             if (result.DebugMode)
             {
                 TraceLogger.DebugMode = true;

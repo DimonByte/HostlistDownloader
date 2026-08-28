@@ -19,6 +19,7 @@
         bool CheckDuplicate,
         string? GetSourceName,
         string? AnalyseDuplicateSource,
-        bool MergeMode
+        bool MergeMode,
+        bool UpdateCheck
     );
 }
