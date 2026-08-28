@@ -33,6 +33,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
     {
         public static bool ProblemDuringUpdate;
         public static bool HasDownloadedUpdates;
+        public static List<string> UpdateStatistics = []; //Make this a array, this can be overwritten by whitelist and blocklist, so we need to store the statistics for both and then combine them into a single string for the final output.
         private static bool hasUpdates = false;
         private static readonly Dictionary<string, HashSet<string>> _fileLineCache = [];
         private static readonly Lock _cacheLock = new();
@@ -179,6 +180,15 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             else
             {
                 TraceLogger.Log("User Whitelist not configured. Ignoring", Enums.StatusSeverityType.Debug);
+            }
+            if (userblockListIni.Length != 0)
+            {
+                TraceLogger.Log("User blocklist is configured. Merging user config...");
+                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocation, isBlocklist: true);
+            }
+            else
+            {
+                TraceLogger.Log("User Blocklist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
             GenerateCombinedList();
@@ -483,8 +493,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             int upToDate = outcomes.Values.Count(o => o == DownloadOutcome.SkippedUpToDate);
             int permanentFailures = outcomes.Values.Count(o => o == DownloadOutcome.PermanentFailure);
             int transientFailures = outcomes.Values.Count(o => o == DownloadOutcome.TransientFailure);
-            TraceLogger.Log($"Downloads complete in {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)}: " +
-                $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.");
+            //Add string to UpdateStatistics array on the next available index.
+            string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
+            $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
+            UpdateStatistics.Add(InternalUpdateStats);
+            TraceLogger.Log(InternalUpdateStats);
 
             if (transientFailures > 0)
             {

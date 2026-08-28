@@ -80,22 +80,35 @@ watch.Stop();
 // Handle Post-Update Status
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully in {watch.Elapsed.TotalSeconds} seconds.");
+    ListUpdateStats();
+    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.");
 }
 else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
+    ListUpdateStats();
+    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully and compiled in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
     Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
 }
 else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedUpdates)
 {
-    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (time taken: {watch.Elapsed.TotalSeconds} seconds.)");
+    ListUpdateStats();
+    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (Time taken: {watch.Elapsed.TotalSeconds} seconds.)");
 }
 else // Problem and no downloads
 {
+    ListUpdateStats();
     TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
 
 Console.BackgroundColor = ConsoleColor.Black;
 Console.ForegroundColor = ConsoleColor.White;
+
+static void ListUpdateStats()
+{
+    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}");
+    foreach (var stat in HostListManager.UpdateStatistics)
+    {
+        TraceLogger.Log($"[STATS] {stat}");
+    }
+}
