@@ -26,6 +26,7 @@ using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Transactions;
 
 namespace HostlistDownloader.Modules.HostListDownloaderInternals
 {
@@ -76,7 +77,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
                 ProcessDownloadLists(blockListIni,
                     IOManager.BlockListFolderLocation,
-                    IOManager.CombinedBlockListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
+                    IOManager.CombinedBlockListFileLocationTemp, forceMode, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -86,7 +87,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userblockListIni.Length != 0)
             {
                 TraceLogger.Log("User blocklist is configured. Merging user config...");
-                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocation, isBlocklist: true);
+                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocationTemp, isBlocklist: true);
             }
             else
             {
@@ -115,7 +116,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("Whitelist is configured. Updating whitelists...");
                 ProcessDownloadLists(whiteListIni,
                     IOManager.WhiteListFolderLocation,
-                    IOManager.CombinedWhiteListFileLocation, forceMode, cancellationToken).GetAwaiter().GetResult();
+                    IOManager.CombinedWhiteListFileLocationTemp, forceMode, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -125,7 +126,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userwhiteListIni.Length != 0)
             {
                 TraceLogger.Log("User Whitelist is configured. Merging user config...");
-                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocation, isBlocklist: false);
+                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocationTemp, isBlocklist: false);
             }
             else
             {
@@ -136,8 +137,55 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             {
                 GenerateCombinedList();
             }
+            CommitToMasterLists();
 
             TraceLogger.Log("Host lists update completed!");
+        }
+        /// <summary>
+        /// Commits the temporary generated hostfile files to the final master version.
+        /// This is done to allow a fallback in the event that something goes wrong, so if the generation fails spectacularly, it wont overwrite the existing master lists with a broken version.
+        /// </summary>
+        private static void CommitToMasterLists()
+        {
+            //Move the temp combined lists to their final locations
+            //e.g. HLDcombined-blocklist-TEMP.txt and HLDcombined-whitelist-TEMP.txt will be moved to HLDcombined-blocklist.txt and HLDcombined-whitelist.txt respectively.
+            //This is done to ensure that the combined lists are only updated if the entire process completes successfully. And also to prevent OS file locks from preventing the combined lists from being updated.
+            TraceLogger.Log("Committing temporary combined lists to final locations...");
+            try
+            {
+                if (File.Exists(IOManager.CombinedBlockListFileLocationTemp))
+                {
+                    File.Move(IOManager.CombinedBlockListFileLocationTemp, IOManager.CombinedBlockListFileLocation, overwrite: true);
+                    TraceLogger.Log($"Committed {IOManager.CombinedBlockListFileLocationTemp} to {IOManager.CombinedBlockListFileLocation}", Enums.StatusSeverityType.Debug);
+                }
+                if (File.Exists(IOManager.CombinedWhiteListFileLocationTemp))
+                {
+                    File.Move(IOManager.CombinedWhiteListFileLocationTemp, IOManager.CombinedWhiteListFileLocation, overwrite: true);
+                    TraceLogger.Log($"Committed {IOManager.CombinedWhiteListFileLocationTemp} to {IOManager.CombinedWhiteListFileLocation}", Enums.StatusSeverityType.Debug);
+                }
+                if (File.Exists(IOManager.CombinedListFileLocationTemp))
+                {
+                    File.Move(IOManager.CombinedListFileLocationTemp, IOManager.CombinedListFileLocation, overwrite: true);
+                    TraceLogger.Log($"Committed {IOManager.CombinedListFileLocationTemp} to {IOManager.CombinedListFileLocation}", Enums.StatusSeverityType.Debug);
+                }
+                string[] FilesToCreate = new string[]
+                {
+                    IOManager.CombinedBlockListFileLocationTemp,
+                    IOManager.CombinedWhiteListFileLocationTemp,
+                    IOManager.CombinedListFileLocationTemp
+                };
+                foreach (string file in FilesToCreate)
+                {
+                    File.Create(file).Dispose();
+                }
+                TraceLogger.Log("Temporary combined lists cleared after committing to final locations.",Enums.StatusSeverityType.Debug);
+            }
+            catch (Exception ex)
+            {
+                ProblemDuringUpdate = true;
+                TraceLogger.Log($"Failed to commit combined lists to final locations: {ex}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log("[!] No changes were made to the final combined lists. Please check the logs for details.", Enums.StatusSeverityType.Error);
+            }
         }
 
         public static void StartOfflineListProcessing()
@@ -156,7 +204,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (blockListIni.Length != 0)
             {
                 TraceLogger.Log("Blocklist is configured. Merging...");
-                CompileList(IOManager.BlockListFolderLocation, IOManager.CombinedBlockListFileLocation, blockListIni.Length, 0, DateTime.Now);
+                CompileList(IOManager.BlockListFolderLocation, IOManager.CombinedBlockListFileLocationTemp, blockListIni.Length, 0, DateTime.Now);
             }
             else
             {
@@ -165,7 +213,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (whiteListIni.Length != 0)
             {
                 TraceLogger.Log("Whitelist is configured. Merging user config...");
-                CompileList(IOManager.WhiteListFolderLocation, IOManager.CombinedWhiteListFileLocation, whiteListIni.Length, 0, DateTime.Now);
+                CompileList(IOManager.WhiteListFolderLocation, IOManager.CombinedWhiteListFileLocationTemp, whiteListIni.Length, 0, DateTime.Now);
             }
             else
             {
@@ -175,7 +223,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userwhiteListIni.Length != 0)
             {
                 TraceLogger.Log("User Whitelist is configured. Merging user config...");
-                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocation, isBlocklist: false);
+                MergeUserDefinedDomains(IOManager.CombinedWhiteListFileLocationTemp, isBlocklist: false);
             }
             else
             {
@@ -184,7 +232,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (userblockListIni.Length != 0)
             {
                 TraceLogger.Log("User blocklist is configured. Merging user config...");
-                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocation, isBlocklist: true);
+                MergeUserDefinedDomains(IOManager.CombinedBlockListFileLocationTemp, isBlocklist: true);
             }
             else
             {
@@ -192,6 +240,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             }
 
             GenerateCombinedList();
+            CommitToMasterLists();
         }
 
         /// <summary>
@@ -625,11 +674,11 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
         public static void GenerateCombinedList()
         {
-            TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocation)} list...");
+            TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocationTemp)} list...");
             try
             {
-                var whiteList = ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocation);
-                var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocation);
+                var whiteList = ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocationTemp);
+                var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocationTemp);
                 var filteredLines = blockListLines.Where(line =>
                     !whiteList.Any(whiteItem =>
                     {
@@ -641,8 +690,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                         return line.Equals(whiteItem, StringComparison.OrdinalIgnoreCase);
                     })
                 ).ToList();
-                File.WriteAllLines(IOManager.CombinedListFileLocation, filteredLines);
-                TraceLogger.Log($"Generated combined list to: {IOManager.CombinedListFileLocation} | Line count: {filteredLines.Count:N0}");
+                File.WriteAllLines(IOManager.CombinedListFileLocationTemp, filteredLines);
+                TraceLogger.Log($"Generated combined list to: {IOManager.CombinedListFileLocationTemp} | Line count: {filteredLines.Count:N0}");
             }
             catch (Exception ex)
             {
