@@ -101,6 +101,8 @@ else // Problem and no downloads
     Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
 
+UpdateChecker.IsUpdateAvailable();
+
 Console.BackgroundColor = ConsoleColor.Black;
 Console.ForegroundColor = ConsoleColor.White;
 

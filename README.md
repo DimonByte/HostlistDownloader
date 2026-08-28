@@ -53,6 +53,7 @@ To configure a task schedule to run silently, set up the task using the followin
 | | `/search <domain>` or `/s <domain>` | `<domain>` | Searches for a specific domain in the hostlists. |
 | | `/purge` or `/p` | (None) | Deletes all log files. |
 | | `/help` or `/h` or `/?` | (None) | Displays this help message. |
+| | `/update` | (None) | Checks for updates |
 | | `/debug` | (None) | Enables debug mode for detailed logging. |
 | | `/duplicatescan` or `/dupscan` | (None) | Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files. |
 | | `/dupanalyse` or `/analysedup` | <source_file_name> | Analyses duplicate entries in the hostlists. |
@@ -139,5 +140,9 @@ The `formattype` key controls how every entry in the combined output file is for
 | **[0x2B] (43)** | Timeout threshold reached. | A multi-threaded task waited too long for a process to complete (resource exhaustion or connection stalling). |
 | **[0x32] (50)** | Incorrect directory. | Must be run from the designated working directory for proper file management. |
 | **[Other]** | Internal debugging error. | Reserved codes indicating a rare, system failure. |
+
+## Development
+
+Unstable and development patches are pushed to the develop branch. Main will be used for stable updates.
 
 <hr>
