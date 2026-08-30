@@ -150,15 +150,40 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             //Move the temp combined lists to their final locations
             //e.g. HLDcombined-blocklist-TEMP.txt and HLDcombined-whitelist-TEMP.txt will be moved to HLDcombined-blocklist.txt and HLDcombined-whitelist.txt respectively.
             //This is done to ensure that the combined lists are only updated if the entire process completes successfully. And also to prevent OS file locks from preventing the combined lists from being updated.
-
+            //This also allows partial completion, since the ones that failed usually have a old version in the hostfiles folder, so the user can still use the old version of the combined lists if something goes wrong.
             //First get lines of temp and final and print the difference in the logs for debugging purposes.
 
             var tempCombinedList = File.Exists(IOManager.CombinedListFileLocationTemp) ? File.ReadAllLines(IOManager.CombinedListFileLocationTemp).Length : 0;
             var finalCombinedList = File.Exists(IOManager.CombinedListFileLocation) ? File.ReadAllLines(IOManager.CombinedListFileLocation).Length : 0;
-
-            TraceLogger.Log("Committing temporary combined lists to final locations...");
+            string[] FilesToCreate =
+            [
+                IOManager.CombinedBlockListFileLocationTemp,
+                    IOManager.CombinedWhiteListFileLocationTemp,
+                    IOManager.CombinedListFileLocationTemp
+            ];
+            string[] FilesToBackup =
+            [
+                IOManager.CombinedBlockListFileLocation,
+                    IOManager.CombinedWhiteListFileLocation,
+                    IOManager.CombinedListFileLocation
+            ];
+            TraceLogger.Log("Committing temporary combined lists to final locations... Allow revert is set to " + ConfigManager.Instance.AllowRevert);
             try
             {
+                if (ConfigManager.Instance.AllowRevert && File.Exists(IOManager.CombinedBlockListFileLocation)) //backup
+                {
+                    TraceLogger.Log("Backing up existing combined lists before committing new ones...", Enums.StatusSeverityType.Debug);
+                    foreach (string file in FilesToBackup)
+                    {
+                        string backupPath = file + ".bak";
+                        if (File.Exists(file))
+                        {
+                            File.Copy(file, backupPath, overwrite: true);
+                            TraceLogger.Log($"Backup of existing combined list created at {backupPath}", Enums.StatusSeverityType.Debug);
+                        }
+                    }
+                }
+                TraceLogger.Log("Committing temporary combined lists to final locations...", Enums.StatusSeverityType.Debug);
                 if (File.Exists(IOManager.CombinedBlockListFileLocationTemp))
                 {
                     File.Move(IOManager.CombinedBlockListFileLocationTemp, IOManager.CombinedBlockListFileLocation, overwrite: true);
@@ -174,24 +199,57 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     File.Move(IOManager.CombinedListFileLocationTemp, IOManager.CombinedListFileLocation, overwrite: true);
                     TraceLogger.Log($"Committed {IOManager.CombinedListFileLocationTemp} to {IOManager.CombinedListFileLocation}", Enums.StatusSeverityType.Debug);
                 }
-                string[] FilesToCreate =
-                [
-                    IOManager.CombinedBlockListFileLocationTemp,
-                    IOManager.CombinedWhiteListFileLocationTemp,
-                    IOManager.CombinedListFileLocationTemp
-                ];
                 foreach (string file in FilesToCreate)
                 {
                     File.Create(file).Dispose();
                 }
                 TraceLogger.Log("Temporary combined lists cleared after committing to final locations.",Enums.StatusSeverityType.Debug);
                 TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines");
+                //Save diff to UpdateStatistics.txt
+                File.WriteAllLines(IOManager.UpdateStatsLocation, [$"{tempCombinedList - finalCombinedList}"]);
             }
             catch (Exception ex)
             {
                 ProblemDuringUpdate = true;
                 TraceLogger.Log($"Failed to commit combined lists to final locations: {ex}", Enums.StatusSeverityType.Error);
                 TraceLogger.Log("[!] No changes were made to the final combined lists. Please check the logs for details.", Enums.StatusSeverityType.Error);
+            }
+        }
+
+        public static void RevertToPreviousVersion()
+        {
+            //Replace the Final combined lists with the backup versions if they exist.
+            string[] FilesToRevert =
+            [
+                IOManager.CombinedBlockListFileLocation,
+                    IOManager.CombinedWhiteListFileLocation,
+                    IOManager.CombinedListFileLocation
+            ];
+            string[] BackupFiles =
+            [
+                IOManager.CombinedBlockListFileLocation + ".bak",
+                    IOManager.CombinedWhiteListFileLocation + ".bak",
+                    IOManager.CombinedListFileLocation + ".bak"
+            ];
+            TraceLogger.Log("Reverting to previous version of combined lists...");
+            try
+            {
+                for (int i = 0; i < FilesToRevert.Length; i++)
+                {
+                    if (File.Exists(BackupFiles[i]))
+                    {
+                        File.Move(BackupFiles[i], FilesToRevert[i], overwrite: true);
+                        TraceLogger.Log($"Reverted {FilesToRevert[i]} to previous version from {BackupFiles[i]}", Enums.StatusSeverityType.Warning);
+                    }
+                    else
+                    {
+                        TraceLogger.Log($"No backup found for {FilesToRevert[i]}. Cannot revert.", Enums.StatusSeverityType.Warning);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Failed to revert combined lists to previous versions: {ex}", Enums.StatusSeverityType.Error);
             }
         }
 

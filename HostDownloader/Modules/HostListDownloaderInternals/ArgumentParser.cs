@@ -44,6 +44,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 /getsource <source_name> or /gs <source_name>: Retrieves the source name for a given hostlist file name.
 /merge or /regenerate or /re: Merges all hostlist files and user defined rules into a single consolidated hostlist file WITHOUT going to the internet. Useful for offline use or when user has updated their own user-defined rules and wants to generate a new consolidated hostlist without downloading anything.
 /update: Checks for updates to the HostlistDownloader application and notifies if a newer version is available.
+/diff: Shows differences between the current hostlist and the previous version.
+/revert: Reverts to the previous version of the hostlist if available.
 --Hostlist rules-- (For blocklist/whitelist management)
 /addblocklist <url> or /ab <url>: Add a blocklist source.
 /removeblocklist <url> or /rb <url>: Remove a blocklist source.
@@ -81,6 +83,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             string? analyseDuplicateSource = null;
             bool mergeMode = false;
             bool updateCheck = false;
+            bool diffMode = false;
+            bool revertLists = false;
 
             List<string> remainingArgs = [];
 
@@ -93,6 +97,16 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
 
                 TraceLogger.Log($"Processing argument: {arg}", Enums.StatusSeverityType.Debug);
+
+                if (arg.Equals("/diff", StringComparison.OrdinalIgnoreCase))
+                {
+                    diffMode = true;
+                }
+
+                if (arg.Equals("/revert", StringComparison.OrdinalIgnoreCase))
+                {
+                    revertLists = true;
+                }
 
                 if (arg.Equals("/update", StringComparison.OrdinalIgnoreCase))
                 {
@@ -247,7 +261,9 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 GetSourceName: getSourceName,
                 AnalyseDuplicateSource: analyseDuplicateSource,
                 MergeMode: mergeMode,
-                UpdateCheck: updateCheck
+                UpdateCheck: updateCheck,
+                DiffMode: diffMode,
+                RevertLists: revertLists
             );
         }
         public static void PrintHelp()
@@ -261,6 +277,46 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         /// <param name="result">The parsed result.</param>
         public static void ApplySideEffects(ArgumentResult result)
         {
+            if (result.RevertLists)
+            {
+                TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    HostListManager.RevertToPreviousVersion();
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to revert hostlist: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+            if (result.DiffMode)
+            {
+                TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
+                    if (diffResult.Length == 0)
+                    {
+                        TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
+                    }
+                    //Check if diffResult is a number only
+                    else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
+                    {
+                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
+                    }
+                    else
+                    {
+                        TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
+                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to run diff analysis: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
             if (result.MergeMode)
             {
                 HostListManager.StartOfflineListProcessing();

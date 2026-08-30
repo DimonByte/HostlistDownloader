@@ -22,6 +22,7 @@
 
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.HostListDownloaderInternals;
+using HostlistDownloader.Modules.WindowsSystem;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 
@@ -68,6 +69,17 @@ namespace HostlistDownloader.Modules.Network
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Invalid URL scheme or format: {url}", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                TraceLogger.Log($"{fileID} - {WorkingOnName} | URL must start with http:// or https://: {url}", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+            //If url is http but configmanager's AllowInsecureSources is false, return permanent failure.
+            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !ConfigManager.Instance.AllowInsecureSources)
+            {
+                TraceLogger.Log($"{fileID} - {WorkingOnName} | Insecure HTTP sources has been blocked by configuration, please enable AllowInsecureSources to download from HTTP: {url}", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
             if (string.IsNullOrWhiteSpace(localPath))
@@ -165,9 +177,9 @@ namespace HostlistDownloader.Modules.Network
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressing {contentLength.Value} bytes of GZip data...", Enums.StatusSeverityType.Debug);
                             }
                             //Check if decompressedSize is too large. Crash if it is. This is a safety check to prevent decompression bombs.
-                            if (decompressedStream.CanSeek && decompressedStream.Length > 100 * 1024 * 1024) // 100 MB limit
+                            if (decompressedStream.CanSeek && decompressedStream.Length > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
                             {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressed size exceeds limit of 100 MB. Aborting download to prevent decompression bombs.", Enums.StatusSeverityType.Error);
+                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressed size exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent decompression bombs.", Enums.StatusSeverityType.Error);
                                 return DownloadOutcome.PermanentFailure;
                             }
                             await decompressedStream.CopyToAsync(fileStream, cts.Token).ConfigureAwait(false);
@@ -175,6 +187,12 @@ namespace HostlistDownloader.Modules.Network
                         else
                         {
                             TraceLogger.Log($"{fileID} - {WorkingOnName} | Content is not gzipped, writing directly to file...", Enums.StatusSeverityType.Debug);
+                            //Check if contentLength is too large. Crash if it is. This is a safety check to prevent writing huge files.
+                            if (contentLength.HasValue && contentLength.Value > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
+                            {
+                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Content length exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent writing huge files.", Enums.StatusSeverityType.Error);
+                                return DownloadOutcome.PermanentFailure;
+                            }
                             if (contentLength.HasValue)
                             {
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Writing {contentLength.Value:N0} bytes to file...", Enums.StatusSeverityType.Debug);

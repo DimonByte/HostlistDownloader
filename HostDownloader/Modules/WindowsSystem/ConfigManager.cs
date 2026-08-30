@@ -41,7 +41,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
         [property: JsonPropertyName("userWebsiteBlocklist")] string[]? UserWebsiteBlocklist = null,
         [property: JsonPropertyName("userWebsiteWhitelist")] string[]? UserWebsiteWhitelist = null,
         [property: JsonPropertyName("maxDownloadThreads")] int? MaxDownloadThreads = null,
-        [property: JsonPropertyName("logExpiryInDays")] int? LogExpiryInDays = null)
+        [property: JsonPropertyName("logExpiryInDays")] int? LogExpiryInDays = null,
+        [property: JsonPropertyName("allowInsecureSources")] bool? AllowInsecureSources = null,
+        [property: JsonPropertyName("maxListSizeInMB")] long? MaxListSizeInMB = null,
+        [property: JsonPropertyName("allowRevert")] bool? AllowRevert = null
+        )
     {
         private Settings() : this(null) { }
     }
@@ -65,6 +69,9 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public IReadOnlyList<string> UserWebsiteWhitelist { get; init; }
         public int MaxDownloadThreads { get; init; } = 4;
         public int LogExpiryInDays { get; init; } = 7;
+        public bool AllowInsecureSources { get; init; } = false;
+        public long MaxListSizeInMB { get; init; } = 100;
+        public bool AllowRevert { get; init; } = false;
 
         internal ConfigManager(Settings raw)
         {
@@ -76,6 +83,21 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             if (raw.MaxDownloadThreads.HasValue)
                 MaxDownloadThreads = raw.MaxDownloadThreads.Value;
+
+            if (raw.MaxListSizeInMB.HasValue)
+                MaxListSizeInMB = raw.MaxListSizeInMB.Value;
+            if (MaxListSizeInMB < 1)
+            {
+                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is invalid. Falling back to 100.", Enums.StatusSeverityType.Warning);
+                MaxListSizeInMB = 100;
+            }
+            if (MaxListSizeInMB > 1000)
+            {
+                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is unreasonably high and may cause performance issues. Clamping to 1000.", Enums.StatusSeverityType.Warning);
+                MaxListSizeInMB = 1000;
+            }
+            if (raw.AllowRevert.HasValue)
+                AllowRevert = raw.AllowRevert.Value;
 
             // Validation Logic
             if (MaxDownloadThreads < 1)
@@ -98,6 +120,9 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 LogExpiryInDays = 7;
             }
 
+            if (raw.AllowInsecureSources.HasValue)
+                AllowInsecureSources = raw.AllowInsecureSources.Value;
+
             _instance = this;
         }
 
@@ -113,7 +138,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 UserWebsiteBlocklist: HandleListUpdate(UserWebsiteBlocklist, entry, targetList == "userWebsiteBlocklist"),
                 UserWebsiteWhitelist: HandleListUpdate(UserWebsiteWhitelist, entry, targetList == "userWebsiteWhitelist"),
                 MaxDownloadThreads: MaxDownloadThreads,
-                LogExpiryInDays: LogExpiryInDays
+                LogExpiryInDays: LogExpiryInDays,
+                AllowInsecureSources: AllowInsecureSources,
+                MaxListSizeInMB: MaxListSizeInMB,
+                AllowRevert: AllowRevert
             );
 
             // Create new instance to update the singleton if this is the global reader
@@ -139,7 +167,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 UserWebsiteBlocklist: HandleListRemove(UserWebsiteBlocklist, entry, targetList == "userWebsiteBlocklist"),
                 UserWebsiteWhitelist: HandleListRemove(UserWebsiteWhitelist, entry, targetList == "userWebsiteWhitelist"),
                 MaxDownloadThreads: MaxDownloadThreads,
-                LogExpiryInDays: LogExpiryInDays
+                LogExpiryInDays: LogExpiryInDays,
+                AllowInsecureSources: AllowInsecureSources,
+                MaxListSizeInMB: MaxListSizeInMB,
+                AllowRevert: AllowRevert
             );
 
             var newReader = new ConfigManager(settings);
@@ -183,7 +214,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 UserWebsiteBlocklist: [.. UserWebsiteBlocklist],
                 UserWebsiteWhitelist: [.. UserWebsiteWhitelist],
                 MaxDownloadThreads: MaxDownloadThreads,
-                LogExpiryInDays: LogExpiryInDays
+                LogExpiryInDays: LogExpiryInDays,
+                AllowInsecureSources: AllowInsecureSources,
+                MaxListSizeInMB: MaxListSizeInMB,
+                AllowRevert: AllowRevert
             );
 
             string json = JsonSerializer.Serialize(settings, SettingsJsonSerializerContext.Default.Settings);
@@ -233,7 +267,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 UserWebsiteBlocklist = [],
                 UserWebsiteWhitelist = [],
                 MaxDownloadThreads = 3,
-                LogExpiryInDays = 7
+                LogExpiryInDays = 7,
+                AllowInsecureSources = false,
+                MaxListSizeInMB = 100,
+                AllowRevert = false
             };
 
             string defaultJson = JsonSerializer.Serialize(

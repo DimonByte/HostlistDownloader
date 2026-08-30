@@ -33,25 +33,14 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public static readonly string BlockListFolderLocation = "hostfiles/blocklist";
         public static readonly string WhiteListFolderLocation = "hostfiles/whitelist";
         public static readonly string CombinedListFolderLocation = "hostfiles/combined";
-        //public static readonly string IniBlockListFileLocation = "hostfiles/blocklist.ini";
-        //public static readonly string IniWhiteListFileLocation = "hostfiles/whitelist.ini";
-        //public static readonly string IniUserWebsiteBlockListFileLocation = "hostfiles/userwebsiteblocklist.ini";
-        //public static readonly string IniUserWebsiteWhiteListFileLocation = "hostfiles/userwebsitewhitelist.ini";
-        //Note these combined directories are the final saving location, when HostlistManager merges the files, it will save temp files and once the merge is complete, it will move the final merged file to this location. The temp files will be deleted after the merge is complete.
-        //Temp file names will be HLDcombined-*whitelist/blocklist*-TEMP.txt
-        //public static readonly string CombinedBlockListFileLocationTemp = "hostfiles/combined/HLDcombined-blocklist-TEMP.txt";
-        //public static readonly string CombinedWhiteListFileLocationTemp = "hostfiles/combined/HLDcombined-whitelist-TEMP.txt";
-        //public static readonly string CombinedListFileLocationTemp = "hostfiles/combined/HLDcombined-list-TEMP.txt";
-
         public static readonly string CombinedBlockListFileLocation = "hostfiles/combined/HLDcombined-blocklist.txt";
         public static readonly string CombinedWhiteListFileLocation = "hostfiles/combined/HLDcombined-whitelist.txt";
         public static readonly string CombinedListFileLocation = "hostfiles/combined/HLDcombined-list.txt";
-
         public static readonly string CombinedBlockListFileLocationTemp = "hostfiles/combined/HLDcombined-blocklist-TEMP.txt";
         public static readonly string CombinedWhiteListFileLocationTemp = "hostfiles/combined/HLDcombined-whitelist-TEMP.txt";
         public static readonly string CombinedListFileLocationTemp = "hostfiles/combined/HLDcombined-list-TEMP.txt";
-        //public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
+        public static readonly string UpdateStatsLocation = "logs/updatestats.txt";
         public static readonly string SettingJsonFileLocation = "settings.json";
 
         public static void CreateNecessaryDirectoriesAndFiles()

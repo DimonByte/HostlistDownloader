@@ -20,6 +20,8 @@
         string? GetSourceName,
         string? AnalyseDuplicateSource,
         bool MergeMode,
-        bool UpdateCheck
+        bool UpdateCheck,
+        bool DiffMode,
+        bool RevertLists
     );
 }

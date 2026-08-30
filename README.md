@@ -59,6 +59,7 @@ To configure a task schedule to run silently, set up the task using the followin
 | | `/dupanalyse` or `/analysedup` | <source_file_name> | Analyses duplicate entries in the hostlists. |
 | | `/getsource` or `/gs` | <source_file_name> | Retrieves the source name for a given hostlist file name. |
 | | `/merge` or `/regenerate` or `/re` | (None)  | Regenerates the combined hostlist again without downloading the lists again, good when adding a new user-defined rule and then regenerating the combined lists without checking the internet again. |
+| | `/diff` | (None) | Checks last difference since last run (e.g. 230 lines added since last run.) |
 | **Hostlist Management** | `/addblocklist <url>` or `/ab <url>` | `<url>` | Add a blocklist source URL. |
 | | `/removeblocklist <url>` or `/rb <url>` | `<url>` | Remove a blocklist source URL. |
 | | `/addwhitelist <url>` or `/aw <url>` | `<url>` | Add a whitelist source URL. |
