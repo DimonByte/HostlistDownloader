@@ -6,7 +6,7 @@ We provide security updates only for the latest version:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| Current Version of v1.x   | ✅ |
+| Current Version of v2.x   | ✅ |
 
 ## Reporting a Vulnerability
 
@@ -49,4 +49,11 @@ Realistic commitments we can actually meet:
 
 This project employs:
 
-- **SAST**: [CodeQL] static analysis
+- **SAST**: [CodeQL] static analysis and .NET build results
+- **Decompression Bomb Protection** - for both gzip and uncompressed formats
+- **HTTP Block Protection** - Can be changed by settings.json
+- **Hostlist Size Protection** - Can be changed by settings.json
+- **Sanitizes Generated File Names**
+- **Path Traversal and Symlink Blocking**
+- **Invalid Local Path Rejection**
+- **Atomic File Handling** - The combined list only gets updated when there is a update available and will be updated via atomic file replacement.

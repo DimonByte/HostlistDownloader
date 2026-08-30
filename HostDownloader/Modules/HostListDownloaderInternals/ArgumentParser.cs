@@ -321,7 +321,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             {
                 HostListManager.StartOfflineListProcessing();
             }
-            
+
             if (result.UpdateCheck)
             {
                 TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);

@@ -26,7 +26,6 @@ using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Transactions;
 
 namespace HostlistDownloader.Modules.HostListDownloaderInternals
 {
@@ -203,7 +202,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 {
                     File.Create(file).Dispose();
                 }
-                TraceLogger.Log("Temporary combined lists cleared after committing to final locations.",Enums.StatusSeverityType.Debug);
+                TraceLogger.Log("Temporary combined lists cleared after committing to final locations.", Enums.StatusSeverityType.Debug);
                 TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines");
                 //Save diff to UpdateStatistics.txt
                 File.WriteAllLines(IOManager.UpdateStatsLocation, [$"{tempCombinedList - finalCombinedList}"]);
@@ -341,7 +340,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             try
             {
                 var json = File.ReadAllText(manifestPath);
-                previousSources = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                previousSources = JsonSerializer.Deserialize<Dictionary<string, string>>(
                     json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? [];
             }
             catch (Exception ex)

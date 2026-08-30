@@ -133,7 +133,7 @@ namespace HostlistDownloader.Modules.Network
             }
             else
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | No ETag found, will proceed with download.",Enums.StatusSeverityType.Debug);
+                TraceLogger.Log($"{fileID} - {WorkingOnName} | No ETag found, will proceed with download.", Enums.StatusSeverityType.Debug);
             }
 
             for (int attempt = 1; attempt <= MaxRetries; attempt++)
@@ -204,7 +204,7 @@ namespace HostlistDownloader.Modules.Network
                         {
                             string metadataPath = normalizedLocalPath + ".etag";
                             await File.WriteAllTextAsync(metadataPath, response.Headers.ETag.Tag, cancellationToken).ConfigureAwait(false);
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag stored with file: {response.Headers.ETag.Tag}",Enums.StatusSeverityType.Debug);
+                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag stored with file: {response.Headers.ETag.Tag}", Enums.StatusSeverityType.Debug);
                         }
                         else
                         {
