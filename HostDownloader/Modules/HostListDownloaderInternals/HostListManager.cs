@@ -150,6 +150,12 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             //Move the temp combined lists to their final locations
             //e.g. HLDcombined-blocklist-TEMP.txt and HLDcombined-whitelist-TEMP.txt will be moved to HLDcombined-blocklist.txt and HLDcombined-whitelist.txt respectively.
             //This is done to ensure that the combined lists are only updated if the entire process completes successfully. And also to prevent OS file locks from preventing the combined lists from being updated.
+
+            //First get lines of temp and final and print the difference in the logs for debugging purposes.
+
+            var tempCombinedList = File.Exists(IOManager.CombinedListFileLocationTemp) ? File.ReadAllLines(IOManager.CombinedListFileLocationTemp).Length : 0;
+            var finalCombinedList = File.Exists(IOManager.CombinedListFileLocation) ? File.ReadAllLines(IOManager.CombinedListFileLocation).Length : 0;
+
             TraceLogger.Log("Committing temporary combined lists to final locations...");
             try
             {
@@ -168,17 +174,18 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     File.Move(IOManager.CombinedListFileLocationTemp, IOManager.CombinedListFileLocation, overwrite: true);
                     TraceLogger.Log($"Committed {IOManager.CombinedListFileLocationTemp} to {IOManager.CombinedListFileLocation}", Enums.StatusSeverityType.Debug);
                 }
-                string[] FilesToCreate = new string[]
-                {
+                string[] FilesToCreate =
+                [
                     IOManager.CombinedBlockListFileLocationTemp,
                     IOManager.CombinedWhiteListFileLocationTemp,
                     IOManager.CombinedListFileLocationTemp
-                };
+                ];
                 foreach (string file in FilesToCreate)
                 {
                     File.Create(file).Dispose();
                 }
                 TraceLogger.Log("Temporary combined lists cleared after committing to final locations.",Enums.StatusSeverityType.Debug);
+                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines");
             }
             catch (Exception ex)
             {
