@@ -37,9 +37,19 @@ namespace HostlistDownloader.Modules.WindowsSystem
         //public static readonly string IniWhiteListFileLocation = "hostfiles/whitelist.ini";
         //public static readonly string IniUserWebsiteBlockListFileLocation = "hostfiles/userwebsiteblocklist.ini";
         //public static readonly string IniUserWebsiteWhiteListFileLocation = "hostfiles/userwebsitewhitelist.ini";
+        //Note these combined directories are the final saving location, when HostlistManager merges the files, it will save temp files and once the merge is complete, it will move the final merged file to this location. The temp files will be deleted after the merge is complete.
+        //Temp file names will be HLDcombined-*whitelist/blocklist*-TEMP.txt
+        //public static readonly string CombinedBlockListFileLocationTemp = "hostfiles/combined/HLDcombined-blocklist-TEMP.txt";
+        //public static readonly string CombinedWhiteListFileLocationTemp = "hostfiles/combined/HLDcombined-whitelist-TEMP.txt";
+        //public static readonly string CombinedListFileLocationTemp = "hostfiles/combined/HLDcombined-list-TEMP.txt";
+
         public static readonly string CombinedBlockListFileLocation = "hostfiles/combined/HLDcombined-blocklist.txt";
         public static readonly string CombinedWhiteListFileLocation = "hostfiles/combined/HLDcombined-whitelist.txt";
         public static readonly string CombinedListFileLocation = "hostfiles/combined/HLDcombined-list.txt";
+
+        public static readonly string CombinedBlockListFileLocationTemp = "hostfiles/combined/HLDcombined-blocklist-TEMP.txt";
+        public static readonly string CombinedWhiteListFileLocationTemp = "hostfiles/combined/HLDcombined-whitelist-TEMP.txt";
+        public static readonly string CombinedListFileLocationTemp = "hostfiles/combined/HLDcombined-list-TEMP.txt";
         //public static readonly string IniFormatTypeLocation = "hostfiles/formattype.ini";
         public static readonly string LogsLocation = "logs";
         public static readonly string SettingJsonFileLocation = "settings.json";
@@ -65,7 +75,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                 }
             }
-            string[] files = [CombinedListFileLocation, CombinedBlockListFileLocation, CombinedWhiteListFileLocation];
+            string[] files = [CombinedListFileLocationTemp, CombinedBlockListFileLocationTemp, CombinedWhiteListFileLocationTemp];
             foreach (string file in files)
             {
                 if (!File.Exists(file))
@@ -77,7 +87,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                             Directory.CreateDirectory(directory);
                         File.Create(file).Dispose();
-                        TraceLogger.Log($"Created file: {file}");
+                        TraceLogger.Log($"Created file: {file}", Enums.StatusSeverityType.Debug);
                     }
                     catch (Exception ex)
                     {
