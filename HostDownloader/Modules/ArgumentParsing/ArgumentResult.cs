@@ -1,4 +1,4 @@
-﻿namespace HostlistDownloader.Modules.HostListDownloaderInternals
+﻿namespace HostlistDownloader.Modules.ArgumentParsing
 {
     public record ArgumentResult(
         bool IsQuiet,

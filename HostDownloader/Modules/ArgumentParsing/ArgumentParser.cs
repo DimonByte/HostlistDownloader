@@ -21,10 +21,12 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.HostlistManagement;
+using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
 
-namespace HostlistDownloader.Modules.HostListDownloaderInternals
+namespace HostlistDownloader.Modules.ArgumentParsing
 {
     /// <summary>
     /// Parses command-line arguments and returns structured results.
@@ -365,7 +367,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    HostListManager.RunDuplicateCheck();
+                    IOManager.RunDuplicateCheck();
                 }
                 catch (Exception ex)
                 {
@@ -379,7 +381,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
                 try
                 {
-                    HostListManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
+                    IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
                     TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
                 }
                 catch (Exception ex)
@@ -405,14 +407,14 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                     {
                         TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
                         string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
-                        string sourceName = HostListManager.GetSourceNameForFile(result.GetSourceName, true);
+                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
                         TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
                     }
                     else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
                     {
                         TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
                         string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
-                        string sourceName = HostListManager.GetSourceNameForFile(result.GetSourceName, false);
+                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
                         TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
                     }
                 }

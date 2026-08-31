@@ -21,7 +21,7 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
-using HostlistDownloader.Modules.HostListDownloaderInternals;
+using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.IO.Compression;
 using System.Net.Http.Headers;
@@ -39,7 +39,8 @@ namespace HostlistDownloader.Modules.Network
         SkippedUpToDate,
         TransientFailure,
         PermanentFailure,
-        Cancelled
+        Cancelled,
+        DownloadBlockedByConfig
     }
 
     internal class DownloadController
@@ -80,7 +81,7 @@ namespace HostlistDownloader.Modules.Network
             if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !ConfigManager.Instance.AllowInsecureSources)
             {
                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Insecure HTTP sources has been blocked by configuration, please enable AllowInsecureSources to download from HTTP: {url}", Enums.StatusSeverityType.Error);
-                return DownloadOutcome.PermanentFailure;
+                return DownloadOutcome.DownloadBlockedByConfig;
             }
             if (string.IsNullOrWhiteSpace(localPath))
             {
@@ -180,7 +181,7 @@ namespace HostlistDownloader.Modules.Network
                             if (decompressedStream.CanSeek && decompressedStream.Length > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
                             {
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressed size exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent decompression bombs.", Enums.StatusSeverityType.Error);
-                                return DownloadOutcome.PermanentFailure;
+                                return DownloadOutcome.DownloadBlockedByConfig;
                             }
                             await decompressedStream.CopyToAsync(fileStream, cts.Token).ConfigureAwait(false);
                         }
@@ -191,7 +192,7 @@ namespace HostlistDownloader.Modules.Network
                             if (contentLength.HasValue && contentLength.Value > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
                             {
                                 TraceLogger.Log($"{fileID} - {WorkingOnName} | Content length exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent writing huge files.", Enums.StatusSeverityType.Error);
-                                return DownloadOutcome.PermanentFailure;
+                                return DownloadOutcome.DownloadBlockedByConfig;
                             }
                             if (contentLength.HasValue)
                             {

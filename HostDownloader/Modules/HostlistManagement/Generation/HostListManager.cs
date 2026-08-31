@@ -24,10 +24,9 @@ using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace HostlistDownloader.Modules.HostListDownloaderInternals
+namespace HostlistDownloader.Modules.HostlistManagement.Generation
 {
     public static class HostListManager
     {
@@ -35,8 +34,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
         public static bool HasDownloadedUpdates;
         public static List<string> UpdateStatistics = []; //Make this a array, this can be overwritten by whitelist and blocklist, so we need to store the statistics for both and then combine them into a single string for the final output.
         private static bool hasUpdates = false;
-        private static readonly Dictionary<string, HashSet<string>> _fileLineCache = [];
-        private static readonly Lock _cacheLock = new();
 
         public static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
         {
@@ -58,7 +55,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("Blocklist is configured. Updating blocklists...");
 
                 // Reconcile sources: detect added/removed URLs individually instead of clearing everything
-                var (addedUrls, removedFileNames) = ReconcileSources(IOManager.BlockListFolderLocation, ConfigManager.Instance.Blocklists);
+                var (addedUrls, removedFileNames) = SourceManager.ReconcileSources(IOManager.BlockListFolderLocation, ConfigManager.Instance.Blocklists);
 
                 if (removedFileNames.Count > 0)
                 {
@@ -96,7 +93,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (whiteListIni.Length != 0)
             {
                 // Reconcile sources for whitelist
-                var (wlAdded, wlRemoved) = ReconcileSources(IOManager.WhiteListFolderLocation, ConfigManager.Instance.Whitelist);
+                var (wlAdded, wlRemoved) = SourceManager.ReconcileSources(IOManager.WhiteListFolderLocation, ConfigManager.Instance.Whitelist);
 
                 if (wlRemoved.Count > 0)
                 {
@@ -134,7 +131,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
             if (hasUpdates)
             {
-                GenerateCombinedList();
+                GenerateTemporaryCombinedList();
             }
             CommitToMasterLists();
 
@@ -254,6 +251,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
         public static void StartOfflineListProcessing()
         {
+            //Used when the user specifies the /offline command argument.
             string[] blockListIni = [.. ConfigManager.Instance.Blocklists];
             string[] whiteListIni = [.. ConfigManager.Instance.Whitelist];
             string[] userblockListIni = [.. ConfigManager.Instance.UserWebsiteBlocklist];
@@ -268,7 +266,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (blockListIni.Length != 0)
             {
                 TraceLogger.Log("Blocklist is configured. Merging...");
-                CompileList(IOManager.BlockListFolderLocation, IOManager.CombinedBlockListFileLocationTemp, blockListIni.Length, 0, DateTime.Now);
+                CompileSpecificList(IOManager.BlockListFolderLocation, IOManager.CombinedBlockListFileLocationTemp, blockListIni.Length, 0, DateTime.Now);
             }
             else
             {
@@ -277,7 +275,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (whiteListIni.Length != 0)
             {
                 TraceLogger.Log("Whitelist is configured. Merging user config...");
-                CompileList(IOManager.WhiteListFolderLocation, IOManager.CombinedWhiteListFileLocationTemp, whiteListIni.Length, 0, DateTime.Now);
+                CompileSpecificList(IOManager.WhiteListFolderLocation, IOManager.CombinedWhiteListFileLocationTemp, whiteListIni.Length, 0, DateTime.Now);
             }
             else
             {
@@ -303,114 +301,8 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                 TraceLogger.Log("User Blocklist not configured. Ignoring", Enums.StatusSeverityType.Debug);
             }
 
-            GenerateCombinedList();
+            GenerateTemporaryCombinedList();
             CommitToMasterLists();
-        }
-
-        /// <summary>
-        /// Compares the previous run's _sources.json manifest against the current configuration
-        /// to identify which URLs were added or removed since the last run.
-        /// </summary>
-        /// <param name="listFolderLocation">Folder containing the downloaded list files and _sources.json.</param>
-        /// <param name="currentConfigUrls">The full set of URLs from the current configuration.</param>
-        /// <returns>
-        /// A tuple of:
-        /// <list type="bullet">
-        /// <item><description><b>addedUrls</b> – URLs present in config but absent from the previous manifest (new sources to download).</description></item>
-        /// <item><description><b>removedFileNames</b> – File names from the previous manifest whose URLs are no longer in config (files to delete).</description></item>
-        /// </list>
-        /// </returns>
-        private static (List<string> addedUrls, List<string> removedFileNames) ReconcileSources(
-            string listFolderLocation,
-            IReadOnlyList<string> currentConfigUrls)
-        {
-            string manifestPath = Path.Combine(listFolderLocation, "_sources.json");
-            var addedUrls = new List<string>();
-            var removedFileNames = new List<string>();
-
-            // If there's no manifest yet (first run), everything is "new"
-            if (!File.Exists(manifestPath))
-            {
-                TraceLogger.Log($"No _sources.json found in {listFolderLocation}. Treating all {currentConfigUrls.Count} URL(s) as new (first run).", Enums.StatusSeverityType.Debug);
-                addedUrls.AddRange(currentConfigUrls);
-                return (addedUrls, removedFileNames);
-            }
-
-            Dictionary<string, string> previousSources;
-            try
-            {
-                var json = File.ReadAllText(manifestPath);
-                previousSources = JsonSerializer.Deserialize<Dictionary<string, string>>(
-                    json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? [];
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Failed to read _sources.json in {listFolderLocation} ({ex.Message}). Treating all URLs as new.", Enums.StatusSeverityType.Warning);
-                addedUrls.AddRange(currentConfigUrls);
-                return (addedUrls, removedFileNames);
-            }
-
-            // Build a lookup: URL → fileName from the previous manifest
-            var previousUrlLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kvp in previousSources)
-            {
-                previousUrlLookup[kvp.Value] = kvp.Key; // url → fileName
-            }
-
-            // Detect removed URLs: in previous manifest but NOT in current config
-            foreach (var url in previousUrlLookup.Keys)
-            {
-                if (!currentConfigUrls.Any(c => c.Equals(url, StringComparison.OrdinalIgnoreCase)))
-                {
-                    removedFileNames.Add(previousUrlLookup[url]);
-                }
-            }
-
-            // Detect added URLs: in current config but NOT in previous manifest
-            foreach (var url in currentConfigUrls)
-            {
-                if (!previousUrlLookup.ContainsKey(url))
-                {
-                    addedUrls.Add(url);
-                }
-            }
-            TraceLogger.Log($"Reconciliation complete for {listFolderLocation}: {addedUrls.Count} new URL(s), {removedFileNames.Count} removed URL(s).", Enums.StatusSeverityType.Debug);
-            return (addedUrls, removedFileNames);
-        }
-
-        /// <summary>
-        /// After ProcessDownloadLists writes the new _sources.json, removes any orphaned files
-        /// in the folder that are no longer referenced by the manifest. This handles the case
-        /// where file numbering shifts after a URL removal (e.g. "3-C.txt" becomes "2-C.txt").
-        /// </summary>
-        private static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
-        {
-            var validFileNames = new HashSet<string>(validSources.Keys, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var file in Directory.GetFiles(listFolderLocation))
-            {
-                var fileName = Path.GetFileName(file);
-
-                // Skip non-list files
-                if (fileName.EndsWith(".etag", StringComparison.OrdinalIgnoreCase)) continue;
-                if (fileName.Equals("_sources.json", StringComparison.OrdinalIgnoreCase)) continue;
-                if (fileName.Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase)) continue;
-
-                if (!validFileNames.Contains(fileName))
-                {
-                    try
-                    {
-                        File.Delete(file);
-                        var etagPath = file + ".etag";
-                        if (File.Exists(etagPath)) File.Delete(etagPath);
-                        TraceLogger.Log($"Cleaned up orphaned file: {fileName}", Enums.StatusSeverityType.Debug);
-                    }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to clean up orphaned file {fileName}: {ex.Message}", Enums.StatusSeverityType.Warning);
-                    }
-                }
-            }
         }
 
         private static void MergeUserDefinedDomains(string CombinedLocation, bool isBlocklist)
@@ -484,7 +376,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
             foreach (var iniLocation in iniLocations)
             {
-                var urls = ReadUrlsFromFile(iniLocation);
+                var urls = IOManager.ReadUrlsFromFile(iniLocation);
                 if (urls != null)
                 {
                     allUrls.AddRange(urls);
@@ -558,6 +450,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                                 TraceLogger.Log($"{fileName} already up to date, skipped.");
                                 break;
                             case DownloadOutcome.PermanentFailure:
+                                ProblemDuringUpdate = true;
                                 TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
                                 break;
                             case DownloadOutcome.TransientFailure:
@@ -566,6 +459,10 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
                                 break;
                             case DownloadOutcome.Cancelled:
                                 TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
+                                break;
+                            case DownloadOutcome.DownloadBlockedByConfig:
+                                ProblemDuringUpdate = true;
+                                TraceLogger.Log($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).", Enums.StatusSeverityType.Warning);
                                 break;
                         }
                     }
@@ -615,7 +512,7 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
 
             // NEW: Clean up any orphaned files that are no longer in the manifest
             // (handles renumbering after URL removals, e.g. "3-C.txt" → "2-C.txt")
-            CleanupOrphanedFiles(ListFolderLocation, manifestForSerialization);
+            SourceManager.CleanupOrphanedFiles(ListFolderLocation, manifestForSerialization);
 
             int succeeded = outcomes.Values.Count(o => o == DownloadOutcome.Success);
             int upToDate = outcomes.Values.Count(o => o == DownloadOutcome.SkippedUpToDate);
@@ -642,12 +539,12 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             if (!HasDownloadedUpdates)
             {
                 TraceLogger.Log("No need to compile lists since no available updates were downloaded. Checking integrity of existing lists...");
-                integrityOk = CheckIntegrity(ListFolderLocation, allUrls.Count, permanentFailures, CombinedListLocation, startTime);
+                integrityOk = IntegrityChecker.CheckIntegrity(ListFolderLocation, allUrls.Count, permanentFailures, CombinedListLocation, startTime, ProblemDuringUpdate, HasDownloadedUpdates);
             }
             else
             {
                 hasUpdates = true;
-                integrityOk = CompileList(ListFolderLocation, CombinedListLocation, allUrls.Count, permanentFailures, startTime);
+                integrityOk = CompileSpecificList(ListFolderLocation, CombinedListLocation, allUrls.Count, permanentFailures, startTime);
             }
 
             if (integrityOk)
@@ -673,76 +570,24 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             await ProcessDownloadLists(iniLocations, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
         }
 
-        public static bool CompileList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
+        public static bool CompileSpecificList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
         {
+            //Used to compile specific lists, e.g. blocklist files or whitelist files, into a single combined list.
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
             TransformationEngine.BeginTransformation(combinedListLocation);
-            return CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime);
+            return IntegrityChecker.CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime, ProblemDuringUpdate, HasDownloadedUpdates);
         }
 
-        /// <summary>
-        /// Verifies that the number of downloaded files matches the number of configured URLs (minus any
-        /// sources that failed permanently, e.g. a 404, this run - those are expected to be missing and
-        /// re-downloading won't change that), and that the combined list was actually written when updates
-        /// were reported. Returns false on mismatch instead of exiting immediately, so the caller can attempt
-        /// one automatic recovery before treating it as fatal.
-        /// </summary>
-        private static bool CheckURLandFileCount(DirectoryInfo listFolder, int urlCount, int knownPermanentFailures)
-        {
-            TraceLogger.Log($"Checking URL and file count for {listFolder.FullName}...");
-            IEnumerable<string> files = Directory.GetFiles(listFolder.FullName, "*")
-                .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase));
-            int fileCount = files.Count();
-            int expectedCount = urlCount - knownPermanentFailures;
-            if (fileCount != expectedCount)
-            {
-                TraceLogger.Log($"URL and List file count mismatch! URL Count: {urlCount} (Expected present: {expectedCount} after excluding {knownPermanentFailures} known-unreachable source(s)) | File Count: {fileCount}", Enums.StatusSeverityType.Error);
-                return false;
-            }
-            TraceLogger.Log($"Url Count OK, no mismatch. (URL Count: {urlCount} | File Count: {fileCount})");
-            return true;
-        }
 
-        private static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime)
+        public static void GenerateTemporaryCombinedList()
         {
-            TraceLogger.Log("Checking integrity of host files...");
-            if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
-            {
-                TraceLogger.Log($"Integrity check failed due to URL and file count mismatch. Please check the logs for details.", Enums.StatusSeverityType.Error);
-                return false;
-            }
-            TraceLogger.Log("Checking if combined list has been written to during update...", Enums.StatusSeverityType.Debug);
-            if (new FileInfo(CombinedListLocation).Length > 0)
-            {
-                TraceLogger.Log($"{CombinedListLocation} has valid file size.", Enums.StatusSeverityType.Debug);
-                if (!ProblemDuringUpdate && HasDownloadedUpdates)
-                {
-                    DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
-                    if (lastWriteTime < startTime)
-                    {
-                        TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.", Enums.StatusSeverityType.Error);
-                        return false;
-                    }
-                }
-                else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
-                {
-                    TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.", Enums.StatusSeverityType.Debug);
-                }
-            }
-            TraceLogger.Log("Integrity check complete. No issues detected.");
-            return true;
-        }
-
-        public static void GenerateCombinedList()
-        {
-            TraceLogger.Log($"Generating {Path.GetFileName(IOManager.CombinedListFileLocationTemp)} list...");
+            //Used to combine the compiled blocklist and whitelist into a single combined list file, which is then used for the final output to the user.
+            TraceLogger.Log($"Generating temporary {Path.GetFileName(IOManager.CombinedListFileLocationTemp)} list...");
             try
             {
-                var whiteList = ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocationTemp);
-                var blockListLines = ReadLinesFromFile(IOManager.CombinedBlockListFileLocationTemp);
+                var whiteList = IOManager.ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocationTemp);
+                var blockListLines = IOManager.ReadLinesFromFile(IOManager.CombinedBlockListFileLocationTemp);
                 var filteredLines = blockListLines.Where(line =>
                     !whiteList.Any(whiteItem =>
                     {
@@ -760,337 +605,6 @@ namespace HostlistDownloader.Modules.HostListDownloaderInternals
             catch (Exception ex)
             {
                 TraceLogger.Log($"Combined List Generation Failure: {ex}", Enums.StatusSeverityType.Error);
-            }
-        }
-
-        private static IEnumerable<string> ReadLinesFromFile(string filePath)
-        {
-            if (!File.Exists(filePath))
-                return [];
-
-            return File.ReadLines(filePath)
-                      .Select(line => line.Trim())
-                      .Where(line => !string.IsNullOrEmpty(line));
-        }
-
-        private static HashSet<string> ReadLinesFromFileCached(string filePath)
-        {
-            lock (_cacheLock)
-            {
-                if (_fileLineCache.TryGetValue(filePath, out var cachedLines))
-                {
-                    return cachedLines;
-                }
-
-                var lines = new HashSet<string>(ReadLinesFromFile(filePath), StringComparer.OrdinalIgnoreCase);
-                _fileLineCache[filePath] = lines;
-                return lines;
-            }
-        }
-
-        private static List<string> ReadUrlsFromFile(string filePath)
-        {
-            var urls = new List<string>();
-
-            try
-            {
-                if (string.IsNullOrWhiteSpace(filePath) || filePath.StartsWith('#'))
-                    return null!;
-
-                urls.Add(filePath.Trim());
-
-                if (urls.Count == 0)
-                {
-                    TraceLogger.Log($"No URLs in {filePath}.", Enums.StatusSeverityType.Warning);
-                }
-
-                return urls;
-            }
-            catch (Exception ex)
-            {
-                ProblemDuringUpdate = true;
-                TraceLogger.Log($"Error reading URLs from {filePath}: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.InvalidConfigEntry);
-                return urls;
-            }
-        }
-
-        /// <summary>
-        /// Runs a duplicate check across all downloaded hostlists.
-        /// </summary>
-        public static void RunDuplicateCheck()
-        {
-            TraceLogger.Log("Starting Duplicate Analysis...", Enums.StatusSeverityType.Information);
-            var blockListFolder = IOManager.BlockListFolderLocation;
-            var whiteListFolder = IOManager.WhiteListFolderLocation;
-            var allLists = new List<(string Name, HashSet<string> Lines)>();
-
-            try
-            {
-                if (Directory.Exists(blockListFolder))
-                {
-                    foreach (var file in Directory.GetFiles(blockListFolder))
-                    {
-                        var fileName = Path.GetFileName(file);
-                        if (IsInternalFile(fileName)) continue;
-
-                        TraceLogger.Log($"Loading {fileName} for analysis...", Enums.StatusSeverityType.Debug);
-                        var lines = ReadLinesFromFileCached(file);
-                        allLists.Add((fileName, lines));
-                    }
-                }
-
-                if (Directory.Exists(whiteListFolder))
-                {
-                    foreach (var file in Directory.GetFiles(whiteListFolder))
-                    {
-                        var fileName = Path.GetFileName(file);
-                        if (IsInternalFile(fileName)) continue;
-
-                        TraceLogger.Log($"Loading {fileName} for analysis...", Enums.StatusSeverityType.Debug);
-                        var lines = ReadLinesFromFileCached(file);
-                        allLists.Add((fileName, lines));
-                    }
-                }
-
-                if (allLists.Count < 2)
-                {
-                    TraceLogger.Log("Not enough hostlists found to perform duplicate comparison.", Enums.StatusSeverityType.Warning);
-                    return;
-                }
-
-                TraceLogger.Log($"Analyzing {allLists.Count} hostlists for duplicates...", Enums.StatusSeverityType.Information);
-                var results = new List<DuplicateResult>();
-                foreach (var currentList in allLists)
-                {
-                    var (Name, Lines) = currentList;
-                    if (Lines == null || Lines.Count == 0) continue;
-
-                    var overlaps = new List<(string SourceName, int Count, double Percentage)>();
-                    var uniqueDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var source in allLists)
-                    {
-                        if (string.Equals(Name, source.Name, StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        var (SourceName, SourceLines) = source;
-
-                        int sharedCount = 0;
-                        foreach (var line in Lines)
-                        {
-                            if (SourceLines.Contains(line))
-                            {
-                                sharedCount++;
-                                uniqueDuplicates.Add(line);
-                            }
-                        }
-
-                        if (sharedCount > 0)
-                        {
-                            double percentage = (sharedCount / (double)Lines.Count) * 100;
-                            overlaps.Add((SourceName, sharedCount, percentage));
-                        }
-                    }
-                    if (uniqueDuplicates.Count > 0)
-                    {
-                        double totalDupPercentage = (uniqueDuplicates.Count / (double)Lines.Count) * 100;
-
-                        results.Add(new DuplicateResult
-                        {
-                            TargetName = Name,
-                            TotalPercentage = totalDupPercentage,
-                            Overlaps = [.. overlaps.OrderByDescending(o => o.Percentage)]
-                        });
-                    }
-                }
-
-                if (results.Count == 0)
-                {
-                    TraceLogger.Log("No significant duplicates found.", Enums.StatusSeverityType.Information);
-                    return;
-                }
-
-                // Sort results by total duplicate percentage (highest first)
-                results.Sort((a, b) => b.TotalPercentage.CompareTo(a.TotalPercentage));
-
-                foreach (var result in results)
-                {
-                    string statusIcon = result.TotalPercentage > 50 ? "!!" : result.TotalPercentage > 10 ? "! " : "  ";
-                    TraceLogger.Log($"[{statusIcon}] {result.TargetName} is {result.TotalPercentage:F1}% duplicated", Enums.StatusSeverityType.Information);
-
-                    foreach (var (SourceName, Count, Percentage) in result.Overlaps)
-                    {
-                        TraceLogger.Log($"{SourceName}: {Percentage:F1}% ({Count:N0} entries)", Enums.StatusSeverityType.Debug);
-                    }
-                }
-
-                TraceLogger.Log("Duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve source information, and /analysedup \"<source_name>\" to analyze duplicates for a specific source.", Enums.StatusSeverityType.Information);
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Error during duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
-            }
-        }
-
-        private static bool IsInternalFile(string fileName)
-        {
-            return fileName.Equals("_sources.json", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.EndsWith(".etag", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.Contains("combined", StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Helper class to hold analysis results for sorting and formatting
-        /// </summary>
-        private class DuplicateResult
-        {
-            public string TargetName { get; set; } = "";
-            public double TotalPercentage { get; set; }
-            public List<(string SourceName, int Count, double Percentage)> Overlaps { get; set; } = [];
-        }
-
-        public static string GetSourceNameForFile(string fileName, bool isBlockList)
-        {
-            string manifestPath = Path.Combine(isBlockList ? IOManager.BlockListFolderLocation : IOManager.WhiteListFolderLocation, "_sources.json");
-            if (!File.Exists(manifestPath))
-            {
-                TraceLogger.Log($"Source manifest not found at {manifestPath}.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
-            }
-
-            var manifestContent = File.ReadAllText(manifestPath);
-            using var doc = JsonDocument.Parse(manifestContent);
-
-            if (doc.RootElement.TryGetProperty(fileName, out var element))
-            {
-                return element.GetString() ?? fileName;
-            }
-
-            return fileName;
-        }
-
-        /// <summary>
-        /// Performs an in-depth analysis of duplicate entries for a specific hostlist.
-        /// Identifies exactly which lines are duplicated and which source files contain them.
-        /// </summary>
-        /// <param name="targetFileName">The filename to analyze for duplicates.</param>
-        public static void AnalyseDuplicate(string targetFileName)
-        {
-            TraceLogger.Log($"Starting deep duplicate analysis for: {targetFileName}...", Enums.StatusSeverityType.Information);
-
-            var blockListFolder = IOManager.BlockListFolderLocation;
-            var whiteListFolder = IOManager.WhiteListFolderLocation;
-            var allLists = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-            try
-            {
-                if (Directory.Exists(blockListFolder))
-                {
-                    foreach (var file in Directory.GetFiles(blockListFolder))
-                    {
-                        var fileName = Path.GetFileName(file);
-                        if (IsInternalFile(fileName)) continue;
-
-                        var lines = ReadLinesFromFileCached(file);
-                        if (lines != null && lines.Count > 0)
-                            allLists[fileName] = lines;
-                    }
-                }
-
-                if (Directory.Exists(whiteListFolder))
-                {
-                    foreach (var file in Directory.GetFiles(whiteListFolder))
-                    {
-                        var fileName = Path.GetFileName(file);
-                        if (IsInternalFile(fileName)) continue;
-
-                        var lines = ReadLinesFromFileCached(file);
-                        if (lines != null && lines.Count > 0)
-                            allLists[fileName] = lines;
-                    }
-                }
-
-                if (!allLists.ContainsKey(targetFileName))
-                {
-                    TraceLogger.Log($"Target file '{targetFileName}' not found in loaded lists.", Enums.StatusSeverityType.Warning);
-                    return;
-                }
-                if (!allLists.TryGetValue(targetFileName, out var targetLines))
-                {
-                    TraceLogger.Log($"Failed to retrieve lines for '{targetFileName}'.", Enums.StatusSeverityType.Error);
-                    return;
-                }
-                var duplicateMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var kvp in allLists)
-                {
-                    var sourceName = kvp.Key;
-                    var sourceLines = kvp.Value;
-
-                    if (string.Equals(targetFileName, sourceName, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    foreach (var line in targetLines)
-                    {
-                        if (sourceLines.Contains(line))
-                        {
-                            if (!duplicateMap.TryGetValue(sourceName, out var list))
-                            {
-                                list = [];
-                                duplicateMap[sourceName] = list;
-                            }
-                            list.Add(line);
-                        }
-                    }
-                }
-
-                if (duplicateMap.Count == 0)
-                {
-                    TraceLogger.Log($"No duplicates found for '{targetFileName}'. It is unique.", Enums.StatusSeverityType.Information);
-                    return;
-                }
-                TraceLogger.Log($"Found duplicates in {duplicateMap.Count} other hostlists.", Enums.StatusSeverityType.Information);
-
-                var sortedSources = duplicateMap.OrderBy(x => x.Value.Count, Comparer<int>.Default).Reverse();
-                foreach (var (sourceName, dupLines) in sortedSources)
-                {
-                    int dupCount = dupLines.Count;
-                    double targetOverlapPercentage = (dupCount / (double)targetLines.Count) * 100;
-
-                    if (!allLists.TryGetValue(sourceName, out var sourceLines)) continue;
-
-                    double sourceRedundancyPercentage = (dupCount / (double)sourceLines.Count) * 100;
-                    int sourceUniqueEntries = sourceLines.Count - dupCount;
-
-                    TraceLogger.Log($"--- Duplicate Source: {sourceName} ({dupCount} lines, {targetOverlapPercentage:F1}% overlap with Target) ---");
-
-                    int displayLimit = Math.Min(20, dupLines.Count);
-                    for (int i = 0; i < displayLimit; i++)
-                    {
-                        TraceLogger.Log($"  - {dupLines[i]}", Enums.StatusSeverityType.Debug);
-                    }
-
-                    if (dupCount > displayLimit)
-                    {
-                        TraceLogger.Log($"  ... and {dupCount - displayLimit} more duplicate entries.", Enums.StatusSeverityType.Debug);
-                    }
-
-                    if (sourceRedundancyPercentage >= 100.0)
-                    {
-                        TraceLogger.Log($"Redundant: '{sourceName}' is 100% redundant (contains no unique entries).", Enums.StatusSeverityType.Warning);
-                        TraceLogger.Log($"   Consider removing '{sourceName}' as it is fully covered by '{targetFileName}'.");
-                    }
-                    else
-                    {
-                        // Optional: Inform user that while it overlaps, it still has unique content
-                        TraceLogger.Log($"   Note: '{sourceName}' contains {sourceUniqueEntries} unique entries not found in '{targetFileName}'.");
-                    }
-                }
-
-                TraceLogger.Log("Deep duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve individual source files.", Enums.StatusSeverityType.Information);
-            }
-            catch (Exception ex)
-            {
-                TraceLogger.Log($"Error during deep duplicate analysis: {ex.Message}", Enums.StatusSeverityType.Error);
-                TraceLogger.Log(ex.ToString(), Enums.StatusSeverityType.Error);
             }
         }
     }

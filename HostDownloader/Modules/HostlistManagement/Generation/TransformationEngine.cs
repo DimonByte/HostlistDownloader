@@ -25,7 +25,7 @@ using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Net;
 
-namespace HostlistDownloader.Modules.HostListDownloaderInternals
+namespace HostlistDownloader.Modules.HostlistManagement.Generation
 {
     internal class TransformationEngine
     {
