@@ -656,5 +656,38 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 TraceLogger.Log(ex.ToString(), Enums.StatusSeverityType.Error);
             }
         }
+
+        public static void GenerateStatsReport()
+        {
+            //Get last write time of combined list, blocklist, and whitelist
+            //Then get size of each file and number of lines in each file
+            //Then get number of sources in blocklist and whitelist
+            try
+            {
+                var combinedListInfo = new FileInfo(CombinedListFileLocation);
+                var combinedBlockListInfo = new FileInfo(CombinedBlockListFileLocation);
+                var combinedWhiteListInfo = new FileInfo(CombinedWhiteListFileLocation);
+                //Example output:
+                //[Stats Report]
+                //Combined List: 1,234,567 lines, 12.34 MB, Last Updated: 2024-06-01 12:34:56
+                //Combined Blocklist: 1,234,567 lines, 12.34 MB, Last Updated: 2024-06-01 12:34:56
+                //Combined Whitelist: 1,234,567 lines, 12.34 MB, Last Updated: 2024-06-01 12:34:56
+                //Number of Blocklist Sources: 123
+                //Number of Whitelist Sources: 123
+                TraceLogger.Log("[Stats Report]", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Combined List: {File.ReadLines(CombinedListFileLocation).Count():N0} lines, {FormatBytes(combinedListInfo.Length)}, Last Updated: {combinedListInfo.LastWriteTime}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Combined Blocklist: {File.ReadLines(CombinedBlockListFileLocation).Count():N0} lines, {FormatBytes(combinedBlockListInfo.Length)}, Last Updated: {combinedBlockListInfo.LastWriteTime}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Combined Whitelist: {File.ReadLines(CombinedWhiteListFileLocation).Count():N0} lines, {FormatBytes(combinedWhiteListInfo.Length)}, Last Updated: {combinedWhiteListInfo.LastWriteTime}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Number of Blocklist Sources: {ConfigManager.Instance.Blocklists.Count:N0}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Number of Whitelist Sources: {ConfigManager.Instance.Whitelist.Count:N0}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Number of User Blocklist Domains: {ConfigManager.Instance.UserWebsiteBlocklist.Count:N0}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Number of User Whitelist Domains: {ConfigManager.Instance.UserWebsiteWhitelist.Count:N0}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("[Stats Report Complete]");
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Error generating stats report: {ex.Message}", Enums.StatusSeverityType.Error);
+            }
+        }
     }
 }

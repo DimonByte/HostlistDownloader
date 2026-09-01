@@ -87,6 +87,7 @@ namespace HostlistDownloader.Modules.ArgumentParsing
             bool updateCheck = false;
             bool diffMode = false;
             bool revertLists = false;
+            bool statsReport = false;
 
             List<string> remainingArgs = [];
 
@@ -99,6 +100,11 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                 string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
 
                 TraceLogger.Log($"Processing argument: {arg}", Enums.StatusSeverityType.Debug);
+
+                if (arg.Equals("/stats", StringComparison.OrdinalIgnoreCase))
+                {
+                    statsReport = true;
+                }
 
                 if (arg.Equals("/diff", StringComparison.OrdinalIgnoreCase))
                 {
@@ -265,7 +271,8 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                 MergeMode: mergeMode,
                 UpdateCheck: updateCheck,
                 DiffMode: diffMode,
-                RevertLists: revertLists
+                RevertLists: revertLists,
+                StatsReport: statsReport
             );
         }
         public static void PrintHelp()
@@ -279,166 +286,181 @@ namespace HostlistDownloader.Modules.ArgumentParsing
         /// <param name="result">The parsed result.</param>
         public static void ApplySideEffects(ArgumentResult result)
         {
-            if (result.RevertLists)
+            if (result.StatsReport)
             {
-                TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/stats command detected. Generating stats report...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    HostListManager.RevertToPreviousVersion();
+                    IOManager.GenerateStatsReport();
+                    Environment.Exit(0);
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"Failed to revert hostlist: {ex.Message}", Enums.StatusSeverityType.Error);
+                    TraceLogger.Log($"Failed to generate stats report: {ex.Message}", Enums.StatusSeverityType.Error);
                 }
                 Environment.Exit(0);
-            }
-            if (result.DiffMode)
-            {
-                TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
-                try
+
+                if (result.RevertLists)
                 {
-                    var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
-                    if (diffResult.Length == 0)
+                    TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
+                    try
                     {
-                        TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
+                        HostListManager.RevertToPreviousVersion();
                     }
-                    //Check if diffResult is a number only
-                    else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
+                    catch (Exception ex)
                     {
-                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Failed to revert hostlist: {ex.Message}", Enums.StatusSeverityType.Error);
                     }
-                    else
+                    Environment.Exit(0);
+                }
+                if (result.DiffMode)
+                {
+                    TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
+                    try
                     {
-                        TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
-                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
+                        var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
+                        if (diffResult.Length == 0)
+                        {
+                            TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
+                        }
+                        //Check if diffResult is a number only
+                        else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
+                        {
+                            TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
+                        }
+                        else
+                        {
+                            TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
+                            TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    TraceLogger.Log($"Failed to run diff analysis: {ex.Message}", Enums.StatusSeverityType.Error);
-                }
-                Environment.Exit(0);
-            }
-            if (result.MergeMode)
-            {
-                HostListManager.StartOfflineListProcessing();
-            }
-
-            if (result.UpdateCheck)
-            {
-                TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
-                try
-                {
-                    UpdateChecker.IsUpdateAvailable();
-                }
-                catch (Exception ex)
-                {
-                    TraceLogger.Log($"Failed to check for updates: {ex.Message}", Enums.StatusSeverityType.Error);
-                }
-                Environment.Exit(0);
-            }
-
-            if (result.DebugMode)
-            {
-                TraceLogger.DebugMode = true;
-                TraceLogger.Log("/debug enabled. Debug mode is active.", Enums.StatusSeverityType.Debug);
-            }
-
-            if (result.IsQuiet)
-            {
-                TraceLogger.QuietMode = true;
-                TraceLogger.Log("/quiet enabled. Console output will be suppressed.", Enums.StatusSeverityType.Debug);
-            }
-
-            if (result.ShouldPurgeLogs)
-            {
-                TraceLogger.Log("/purge enabled. Deleting all logs...", Enums.StatusSeverityType.Debug);
-                TraceLogger.PurgeAllLogs();
-            }
-
-            if (result.ShowHelp)
-            {
-                PrintHelp();
-                Environment.Exit(0);
-            }
-
-            if (result.CheckDuplicate)
-            {
-                TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
-                try
-                {
-                    IOManager.RunDuplicateCheck();
-                }
-                catch (Exception ex)
-                {
-                    TraceLogger.Log($"Failed to run duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
-                }
-                Environment.Exit(0);
-            }
-
-            if (result.AnalyseDuplicateSource != null)
-            {
-                TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
-                try
-                {
-                    IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
-                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
-                }
-                catch (Exception ex)
-                {
-                    TraceLogger.Log($"Failed to analyse duplicates: {ex.Message}", Enums.StatusSeverityType.Error);
-                }
-                Environment.Exit(0);
-            }
-
-            if (result.GetSourceName != null)
-            {
-                TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
-                try
-                {
-                    //Check if it exists in blocklist or whitelist folders
-                    if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
-                        !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    catch (Exception ex)
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
-                        Environment.Exit(1);
+                        TraceLogger.Log($"Failed to run diff analysis: {ex.Message}", Enums.StatusSeverityType.Error);
                     }
-                    else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
-                    {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
-                        string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
-                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
-                    }
-                    else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
-                    {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
-                        string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
-                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
-                    }
+                    Environment.Exit(0);
                 }
-                catch (Exception ex)
+                if (result.MergeMode)
                 {
-                    TraceLogger.Log($"Failed to retrieve source: {ex.Message}", Enums.StatusSeverityType.Error);
+                    HostListManager.StartOfflineListProcessing();
                 }
-                Environment.Exit(0);
-            }
 
-            bool hasConfigCommands = !string.IsNullOrEmpty(result.AddBlocklistUrl) ||
-                         !string.IsNullOrEmpty(result.RemoveBlocklistUrl) ||
-                         !string.IsNullOrEmpty(result.AddWhitelistUrl) ||
-                         !string.IsNullOrEmpty(result.RemoveWhitelistUrl) ||
-                         !string.IsNullOrEmpty(result.AddUserBlockDomain) ||
-                         !string.IsNullOrEmpty(result.RemoveUserBlockDomain) ||
-                         !string.IsNullOrEmpty(result.AddUserAllowDomain) ||
-                         !string.IsNullOrEmpty(result.RemoveUserAllowDomain);
+                if (result.UpdateCheck)
+                {
+                    TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
+                    try
+                    {
+                        UpdateChecker.IsUpdateAvailable();
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLogger.Log($"Failed to check for updates: {ex.Message}", Enums.StatusSeverityType.Error);
+                    }
+                    Environment.Exit(0);
+                }
 
-            if (hasConfigCommands)
-            {
-                TraceLogger.Log("Configuration update commands detected. Processing...", Enums.StatusSeverityType.Debug);
-                HandleConfigUpdates(result);
-                Environment.Exit(0);
+                if (result.DebugMode)
+                {
+                    TraceLogger.DebugMode = true;
+                    TraceLogger.Log("/debug enabled. Debug mode is active.", Enums.StatusSeverityType.Debug);
+                }
+
+                if (result.IsQuiet)
+                {
+                    TraceLogger.QuietMode = true;
+                    TraceLogger.Log("/quiet enabled. Console output will be suppressed.", Enums.StatusSeverityType.Debug);
+                }
+
+                if (result.ShouldPurgeLogs)
+                {
+                    TraceLogger.Log("/purge enabled. Deleting all logs...", Enums.StatusSeverityType.Debug);
+                    TraceLogger.PurgeAllLogs();
+                }
+
+                if (result.ShowHelp)
+                {
+                    PrintHelp();
+                    Environment.Exit(0);
+                }
+
+                if (result.CheckDuplicate)
+                {
+                    TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
+                    try
+                    {
+                        IOManager.RunDuplicateCheck();
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLogger.Log($"Failed to run duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
+                    }
+                    Environment.Exit(0);
+                }
+
+                if (result.AnalyseDuplicateSource != null)
+                {
+                    TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
+                    try
+                    {
+                        IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
+                        TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLogger.Log($"Failed to analyse duplicates: {ex.Message}", Enums.StatusSeverityType.Error);
+                    }
+                    Environment.Exit(0);
+                }
+
+                if (result.GetSourceName != null)
+                {
+                    TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
+                    try
+                    {
+                        //Check if it exists in blocklist or whitelist folders
+                        if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
+                            !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                        {
+                            TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
+                            Environment.Exit(1);
+                        }
+                        else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
+                        {
+                            TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
+                            string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
+                            string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
+                            TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                        }
+                        else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                        {
+                            TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
+                            string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
+                            string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
+                            TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLogger.Log($"Failed to retrieve source: {ex.Message}", Enums.StatusSeverityType.Error);
+                    }
+                    Environment.Exit(0);
+                }
+
+                bool hasConfigCommands = !string.IsNullOrEmpty(result.AddBlocklistUrl) ||
+                             !string.IsNullOrEmpty(result.RemoveBlocklistUrl) ||
+                             !string.IsNullOrEmpty(result.AddWhitelistUrl) ||
+                             !string.IsNullOrEmpty(result.RemoveWhitelistUrl) ||
+                             !string.IsNullOrEmpty(result.AddUserBlockDomain) ||
+                             !string.IsNullOrEmpty(result.RemoveUserBlockDomain) ||
+                             !string.IsNullOrEmpty(result.AddUserAllowDomain) ||
+                             !string.IsNullOrEmpty(result.RemoveUserAllowDomain);
+
+                if (hasConfigCommands)
+                {
+                    TraceLogger.Log("Configuration update commands detected. Processing...", Enums.StatusSeverityType.Debug);
+                    HandleConfigUpdates(result);
+                    Environment.Exit(0);
+                }
             }
         }
 

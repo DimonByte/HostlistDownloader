@@ -22,6 +22,7 @@
         bool MergeMode,
         bool UpdateCheck,
         bool DiffMode,
-        bool RevertLists
+        bool RevertLists,
+        bool StatsReport
     );
 }
