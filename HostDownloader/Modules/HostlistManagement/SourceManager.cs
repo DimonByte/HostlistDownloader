@@ -22,9 +22,6 @@
 
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Text.Json;
 
 namespace HostlistDownloader.Modules.HostlistManagement
@@ -48,6 +45,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
             string listFolderLocation,
             IReadOnlyList<string> currentConfigUrls)
         {
+            TraceLogger.Log($"Reconciling sources in {listFolderLocation} against current configuration ({currentConfigUrls.Count} URL(s)).", Enums.StatusSeverityType.Debug);
             string manifestPath = Path.Combine(listFolderLocation, "_sources.json");
             var addedUrls = new List<string>();
             var removedFileNames = new List<string>();
@@ -109,6 +107,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
         /// </summary>
         public static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
         {
+            TraceLogger.Log($"Cleaning up orphaned files in {listFolderLocation} based on current _sources.json.", Enums.StatusSeverityType.Debug);
             var validFileNames = new HashSet<string>(validSources.Keys, StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in Directory.GetFiles(listFolderLocation))
@@ -139,6 +138,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
 
         public static string GetSourceNameForFile(string fileName, bool isBlockList)
         {
+            TraceLogger.Log($"Retrieving source name for file {fileName} from {(isBlockList ? "blocklist" : "whitelist")} manifest.", Enums.StatusSeverityType.Debug);
             string manifestPath = Path.Combine(isBlockList ? IOManager.BlockListFolderLocation : IOManager.WhiteListFolderLocation, "_sources.json");
             if (!File.Exists(manifestPath))
             {

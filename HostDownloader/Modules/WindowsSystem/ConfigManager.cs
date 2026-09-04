@@ -75,6 +75,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         internal ConfigManager(Settings raw)
         {
+            TraceLogger.Log($"Initializing ConfigManager with {raw.Blocklists?.Length ?? 0} blocklist(s) and {raw.Whitelist?.Length ?? 0} whitelist(s).", Enums.StatusSeverityType.Debug);
             Blocklists = Array.AsReadOnly(raw.Blocklists ?? []);
             Whitelist = Array.AsReadOnly(raw.Whitelist ?? []);
             Formattype = !string.IsNullOrWhiteSpace(raw.Formattype) ? raw.Formattype : "domain";
@@ -122,7 +123,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             if (raw.AllowInsecureSources.HasValue)
                 AllowInsecureSources = raw.AllowInsecureSources.Value;
-
+            TraceLogger.Log($"ConfigManager initialized: {Blocklists.Count} blocklist(s), {Whitelist.Count} whitelist(s), format type '{Formattype}', {UserWebsiteBlocklist.Count} user website blocklist(s), {UserWebsiteWhitelist.Count} user website whitelist(s), max download threads {MaxDownloadThreads}, log expiry in days {LogExpiryInDays}, allow insecure sources {AllowInsecureSources}, max list size in MB {MaxListSizeInMB}, allow revert {AllowRevert}.", Enums.StatusSeverityType.Debug);
             _instance = this;
         }
 
@@ -131,6 +132,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// </summary>
         public ConfigManager AddEntry(string targetList, string entry)
         {
+            TraceLogger.Log($"Adding entry '{entry}' to '{targetList}' list.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
                 Blocklists: HandleListUpdate(Blocklists, entry, targetList == "blocklists"),
                 Whitelist: HandleListUpdate(Whitelist, entry, targetList == "whitelist"),
@@ -160,6 +162,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// </summary>
         public ConfigManager RemoveEntry(string targetList, string entry)
         {
+            TraceLogger.Log($"Removing entry '{entry}' from '{targetList}' list.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
                 Blocklists: HandleListRemove(Blocklists, entry, targetList == "blocklists"),
                 Whitelist: HandleListRemove(Whitelist, entry, targetList == "whitelist"),
@@ -183,6 +186,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         private static string[] HandleListUpdate(IReadOnlyList<string> list, string entry, bool isSelected)
         {
+            TraceLogger.Log($"Handling list update for entry '{entry}' (isSelected: {isSelected}).", Enums.StatusSeverityType.Debug);
             if (!isSelected) return [.. list];
 
             var currentList = list as List<string> ?? [.. list];
@@ -194,6 +198,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         private static string[] HandleListRemove(IReadOnlyList<string> list, string entry, bool isSelected)
         {
+            TraceLogger.Log($"Handling list removal for entry '{entry}' (isSelected: {isSelected}).", Enums.StatusSeverityType.Debug);
             if (!isSelected) return [.. list];
 
             var currentList = list as List<string> ?? [.. list];
@@ -207,6 +212,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// </summary>
         public void SaveToDisk(string filePath)
         {
+            TraceLogger.Log($"Saving current configuration to '{filePath}'.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
                 Blocklists: [.. Blocklists],
                 Whitelist: [.. Whitelist],
@@ -220,8 +226,15 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 AllowRevert: AllowRevert
             );
 
-            string json = JsonSerializer.Serialize(settings, SettingsJsonSerializerContext.Default.Settings);
-            File.WriteAllText(filePath, json);
+            try
+            {
+                string json = JsonSerializer.Serialize(settings, SettingsJsonSerializerContext.Default.Settings);
+                File.WriteAllText(filePath, json);
+            }
+            catch(Exception ex)
+            {
+                TraceLogger.Log($"Failed to save configuration to '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ErrorCodes.GeneralError);
+            }
         }
 
         /// <summary>
@@ -229,6 +242,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// </summary>
         public static void Init(string jsonFilePath)
         {
+            TraceLogger.Log($"Initializing ConfigManager from '{jsonFilePath}'.", Enums.StatusSeverityType.Debug);
             if (_instance != null)
                 return;
 
@@ -259,6 +273,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         public static void CreateDefaultConfig(string filePath)
         {
+            TraceLogger.Log($"Creating default configuration at '{filePath}'.", Enums.StatusSeverityType.Debug);
             var defaultConfig = new Settings
             {
                 Blocklists = [],
@@ -272,11 +287,18 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 MaxListSizeInMB = 100,
                 AllowRevert = false
             };
+            try
+            {
+                string defaultJson = JsonSerializer.Serialize(
+                    defaultConfig,
+                    SettingsJsonSerializerContext.Default.Settings);
+                File.WriteAllText(filePath, defaultJson);
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Failed to create default configuration at '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ErrorCodes.GeneralError);
 
-            string defaultJson = JsonSerializer.Serialize(
-                defaultConfig,
-                SettingsJsonSerializerContext.Default.Settings);
-            File.WriteAllText(filePath, defaultJson);
+            }
         }
     }
 }

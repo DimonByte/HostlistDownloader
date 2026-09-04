@@ -33,31 +33,37 @@ namespace HostlistDownloader.Modules.ArgumentParsing
     /// </summary>
     public static class ArgumentParser
     {
-        private const string HelpText = @"HostlistDownloader Help:
---HostlistDownloader arguments--
-/quiet or /q: Suppresses console output.
-/fresh or /fr: Clears block and white list folders before updating. Useful for troubleshooting.
-/search <domain> or /s <domain>: Searches for a specific domain in the hostlists.
-/purge or /p: Deletes all log files.
-/help or /h or /?: Displays this help message.
-/debug: Enables debug mode for detailed logging.
-/duplicatescan or /dupscan: Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files.
-/dupanalyse <source_name> or /analysedup <source_name>: Analyses duplicate entries in the hostlists.
-/getsource <source_name> or /gs <source_name>: Retrieves the source name for a given hostlist file name.
-/merge or /regenerate or /re: Merges all hostlist files and user defined rules into a single consolidated hostlist file WITHOUT going to the internet. Useful for offline use or when user has updated their own user-defined rules and wants to generate a new consolidated hostlist without downloading anything.
-/update: Checks for updates to the HostlistDownloader application and notifies if a newer version is available.
-/diff: Shows differences between the current hostlist and the previous version.
-/revert: Reverts to the previous version of the hostlist if available.
---Hostlist rules-- (For blocklist/whitelist management)
-/addblocklist <url> or /ab <url>: Add a blocklist source.
-/removeblocklist <url> or /rb <url>: Remove a blocklist source.
-/addwhitelist <url> or /aw <url>: Add a whitelist source.
-/removewhitelist <url> or /rw <url>: Remove a whitelist source.
---User-defined rules-- (For single-domain management)
-/adduserblock <domain> or /aub <domain>: Add a user-defined website block.
-/removeuserblock <domain> or /rub <domain>: Remove a user-defined website block.
-/adduserwhitelist <domain> or /auw <domain>: Add a user-defined website allow rule.
-/removeuserwhitelist <domain> or /ruw <domain>: Remove a user-defined website allow rule.";
+        private const string HelpText = @"HostlistDownloader Help
+
+USAGE:
+  HostlistDownloader [arguments]
+
+GLOBAL ARGUMENTS:
+  /quiet, /q                Suppress console output.
+  /fresh, /fr               Clear block/white list folders before updating.
+  /search <domain>, /s      Search for a specific domain in hostlists.
+  /purge, /p                Delete all log files.
+  /help, /h, /?             Display this help message.
+  /debug                     Enable detailed debug logging.
+  /duplicatescan, /dupscan  Scan hostlists for duplicates (reports percentage).
+  /dupanalyse <source>, /analysedup <source>  Analyze duplicate entries.
+  /getsource <source>, /gs <source>            Retrieve source name from filename.
+  /merge, /regenerate, /re  Consolidate hostlists and user rules locally (offline).
+  /update                    Check for application updates.
+  /diff                      Show differences from the previous hostlist version.
+  /revert                    Revert to the previous hostlist version.
+
+HOSTLIST MANAGEMENT:
+  /addblocklist <url>, /ab  Add a new blocklist source.
+  /removeblocklist <url>, /rb Remove a blocklist source.
+  /addwhitelist <url>, /aw   Add a new whitelist source.
+  /removewhitelist <url>, /rw Remove a whitelist source.
+
+USER-DEFINED RULES:
+  /adduserblock <domain>, /aub  Add a custom domain block.
+  /removeuserblock <*>, /rub    Remove a custom domain block.
+  /adduserwhitelist <domain>, /auw  Add a custom domain allow rule.
+  /removeuserwhitelist <domain>, /ruw  Remove a custom domain allow rule.";
 
         /// <summary>
         /// Parses the command-line arguments.
@@ -90,6 +96,8 @@ namespace HostlistDownloader.Modules.ArgumentParsing
             bool statsReport = false;
 
             List<string> remainingArgs = [];
+
+            TraceLogger.Log("Starting argument parsing...", Enums.StatusSeverityType.Debug);
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -160,26 +168,26 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                     isQuiet = true;
                 }
                 // Handle /fresh or /fr
-                else if (arg.Equals("/fresh", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/fresh", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/fr", StringComparison.OrdinalIgnoreCase))
                 {
                     isFresh = true;
                 }
                 // Handle /search or /s
-                else if (arg.Equals("/search", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/search", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/s", StringComparison.OrdinalIgnoreCase))
                 {
                     searchDomain = GetNextArg();
                     i++;
                 }
                 // Handle /purge or /p
-                else if (arg.Equals("/purge", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/purge", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/p", StringComparison.OrdinalIgnoreCase))
                 {
                     shouldPurgeLogs = true;
                 }
                 // Handle /help variants
-                else if (arg.Equals("/help", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/help", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/h", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/?", StringComparison.OrdinalIgnoreCase))
                 {
@@ -187,56 +195,56 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                 }
 
                 // Add Blocklist
-                else if (arg.Equals("/addblocklist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/addblocklist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/ab", StringComparison.OrdinalIgnoreCase))
                 {
                     addBlocklistUrl = GetNextArg();
                     i++;
                 }
                 // Remove Blocklist
-                else if (arg.Equals("/removeblocklist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/removeblocklist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rb", StringComparison.OrdinalIgnoreCase))
                 {
                     removeBlocklistUrl = GetNextArg();
                     i++;
                 }
                 // Add Whitelist
-                else if (arg.Equals("/addwhitelist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/addwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/aw", StringComparison.OrdinalIgnoreCase))
                 {
                     addWhitelistUrl = GetNextArg();
                     i++;
                 }
                 // Remove Whitelist
-                else if (arg.Equals("/removewhitelist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/removewhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rw", StringComparison.OrdinalIgnoreCase))
                 {
                     removeWhitelistUrl = GetNextArg();
                     i++;
                 }
                 // Add User Block
-                else if (arg.Equals("/adduserblock", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/adduserblock", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/aub", StringComparison.OrdinalIgnoreCase))
                 {
                     addUserBlockDomain = GetNextArg();
                     i++;
                 }
                 // Remove User Block
-                else if (arg.Equals("/removeuserblock", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/removeuserblock", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rub", StringComparison.OrdinalIgnoreCase))
                 {
                     removeUserBlockDomain = GetNextArg();
                     i++;
                 }
                 // Add User Whitelist
-                else if (arg.Equals("/adduserwhitelist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/adduserwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/auw", StringComparison.OrdinalIgnoreCase))
                 {
                     addUserAllowDomain = GetNextArg();
                     i++;
                 }
                 // Remove User Whitelist
-                else if (arg.Equals("/removeuserwhitelist", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/removeuserwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/ruw", StringComparison.OrdinalIgnoreCase))
                 {
                     removeUserAllowDomain = GetNextArg();
@@ -248,7 +256,7 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                     remainingArgs.Add(arg);
                 }
             }
-
+            TraceLogger.Log("Argument parsing completed.", Enums.StatusSeverityType.Debug);
             return new ArgumentResult(
                 IsQuiet: isQuiet,
                 IsFresh: isFresh,
@@ -286,6 +294,7 @@ namespace HostlistDownloader.Modules.ArgumentParsing
         /// <param name="result">The parsed result.</param>
         public static void ApplySideEffects(ArgumentResult result)
         {
+            TraceLogger.Log($"Applying side effects based on parsed arguments... Argument Results: {result}", Enums.StatusSeverityType.Debug);
             if (result.StatsReport)
             {
                 TraceLogger.Log("/stats command detected. Generating stats report...", Enums.StatusSeverityType.Information);
@@ -299,173 +308,175 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                     TraceLogger.Log($"Failed to generate stats report: {ex.Message}", Enums.StatusSeverityType.Error);
                 }
                 Environment.Exit(0);
+            }
 
-                if (result.RevertLists)
-                {
-                    TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
-                    try
-                    {
-                        HostListManager.RevertToPreviousVersion();
-                    }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to revert hostlist: {ex.Message}", Enums.StatusSeverityType.Error);
-                    }
-                    Environment.Exit(0);
-                }
-                if (result.DiffMode)
-                {
-                    TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
-                    try
-                    {
-                        var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
-                        if (diffResult.Length == 0)
-                        {
-                            TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
-                        }
-                        //Check if diffResult is a number only
-                        else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
-                        {
-                            TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
-                        }
-                        else
-                        {
-                            TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
-                            TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to run diff analysis: {ex.Message}", Enums.StatusSeverityType.Error);
-                    }
-                    Environment.Exit(0);
-                }
-                if (result.MergeMode)
-                {
-                    HostListManager.StartOfflineListProcessing();
-                }
 
-                if (result.UpdateCheck)
+            if (result.RevertLists)
+            {
+                TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
+                try
                 {
-                    TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
-                    try
+                    HostListManager.RevertToPreviousVersion();
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to revert hostlist: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+            if (result.DiffMode)
+            {
+                TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
+                    if (diffResult.Length == 0)
                     {
-                        UpdateChecker.IsUpdateAvailable();
+                        TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
                     }
-                    catch (Exception ex)
+                    //Check if diffResult is a number only
+                    else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
                     {
-                        TraceLogger.Log($"Failed to check for updates: {ex.Message}", Enums.StatusSeverityType.Error);
+                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
                     }
-                    Environment.Exit(0);
-                }
-
-                if (result.DebugMode)
-                {
-                    TraceLogger.DebugMode = true;
-                    TraceLogger.Log("/debug enabled. Debug mode is active.", Enums.StatusSeverityType.Debug);
-                }
-
-                if (result.IsQuiet)
-                {
-                    TraceLogger.QuietMode = true;
-                    TraceLogger.Log("/quiet enabled. Console output will be suppressed.", Enums.StatusSeverityType.Debug);
-                }
-
-                if (result.ShouldPurgeLogs)
-                {
-                    TraceLogger.Log("/purge enabled. Deleting all logs...", Enums.StatusSeverityType.Debug);
-                    TraceLogger.PurgeAllLogs();
-                }
-
-                if (result.ShowHelp)
-                {
-                    PrintHelp();
-                    Environment.Exit(0);
-                }
-
-                if (result.CheckDuplicate)
-                {
-                    TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
-                    try
+                    else
                     {
-                        IOManager.RunDuplicateCheck();
+                        TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
+                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
                     }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to run duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
-                    }
-                    Environment.Exit(0);
                 }
-
-                if (result.AnalyseDuplicateSource != null)
+                catch (Exception ex)
                 {
-                    TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
-                    try
-                    {
-                        IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
-                        TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
-                    }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to analyse duplicates: {ex.Message}", Enums.StatusSeverityType.Error);
-                    }
-                    Environment.Exit(0);
+                    TraceLogger.Log($"Failed to run diff analysis: {ex.Message}", Enums.StatusSeverityType.Error);
                 }
+                Environment.Exit(0);
+            }
+            if (result.MergeMode)
+            {
+                HostListManager.StartOfflineListProcessing();
+            }
 
-                if (result.GetSourceName != null)
+            if (result.UpdateCheck)
+            {
+                TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
+                try
                 {
-                    TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
-                    try
-                    {
-                        //Check if it exists in blocklist or whitelist folders
-                        if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
-                            !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
-                        {
-                            TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
-                            Environment.Exit(1);
-                        }
-                        else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
-                        {
-                            TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
-                            string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
-                            string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
-                            TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
-                        }
-                        else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
-                        {
-                            TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
-                            string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
-                            string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
-                            TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        TraceLogger.Log($"Failed to retrieve source: {ex.Message}", Enums.StatusSeverityType.Error);
-                    }
-                    Environment.Exit(0);
+                    UpdateChecker.IsUpdateAvailable();
                 }
-
-                bool hasConfigCommands = !string.IsNullOrEmpty(result.AddBlocklistUrl) ||
-                             !string.IsNullOrEmpty(result.RemoveBlocklistUrl) ||
-                             !string.IsNullOrEmpty(result.AddWhitelistUrl) ||
-                             !string.IsNullOrEmpty(result.RemoveWhitelistUrl) ||
-                             !string.IsNullOrEmpty(result.AddUserBlockDomain) ||
-                             !string.IsNullOrEmpty(result.RemoveUserBlockDomain) ||
-                             !string.IsNullOrEmpty(result.AddUserAllowDomain) ||
-                             !string.IsNullOrEmpty(result.RemoveUserAllowDomain);
-
-                if (hasConfigCommands)
+                catch (Exception ex)
                 {
-                    TraceLogger.Log("Configuration update commands detected. Processing...", Enums.StatusSeverityType.Debug);
-                    HandleConfigUpdates(result);
-                    Environment.Exit(0);
+                    TraceLogger.Log($"Failed to check for updates: {ex.Message}", Enums.StatusSeverityType.Error);
                 }
+                Environment.Exit(0);
+            }
+
+            if (result.DebugMode)
+            {
+                TraceLogger.DebugMode = true;
+                TraceLogger.Log("/debug enabled. Debug mode is active.", Enums.StatusSeverityType.Debug);
+            }
+
+            if (result.IsQuiet)
+            {
+                TraceLogger.QuietMode = true;
+                TraceLogger.Log("/quiet enabled. Console output will be suppressed.", Enums.StatusSeverityType.Debug);
+            }
+
+            if (result.ShouldPurgeLogs)
+            {
+                TraceLogger.Log("/purge enabled. Deleting all logs...", Enums.StatusSeverityType.Debug);
+                TraceLogger.PurgeAllLogs();
+            }
+
+            if (result.ShowHelp)
+            {
+                PrintHelp();
+                Environment.Exit(0);
+            }
+
+            if (result.CheckDuplicate)
+            {
+                TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
+                try
+                {
+                    IOManager.RunDuplicateCheck();
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to run duplicate check: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
+            if (result.AnalyseDuplicateSource != null)
+            {
+                TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
+                try
+                {
+                    IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
+                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to analyse duplicates: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
+            if (result.GetSourceName != null)
+            {
+                TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
+                try
+                {
+                    //Check if it exists in blocklist or whitelist folders
+                    if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
+                        !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
+                        Environment.Exit(1);
+                    }
+                    else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
+                        string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
+                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                    }
+                    else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    {
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
+                        string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
+                        string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Failed to retrieve source: {ex.Message}", Enums.StatusSeverityType.Error);
+                }
+                Environment.Exit(0);
+            }
+
+            bool hasConfigCommands = !string.IsNullOrEmpty(result.AddBlocklistUrl) ||
+                         !string.IsNullOrEmpty(result.RemoveBlocklistUrl) ||
+                         !string.IsNullOrEmpty(result.AddWhitelistUrl) ||
+                         !string.IsNullOrEmpty(result.RemoveWhitelistUrl) ||
+                         !string.IsNullOrEmpty(result.AddUserBlockDomain) ||
+                         !string.IsNullOrEmpty(result.RemoveUserBlockDomain) ||
+                         !string.IsNullOrEmpty(result.AddUserAllowDomain) ||
+                         !string.IsNullOrEmpty(result.RemoveUserAllowDomain);
+
+            if (hasConfigCommands)
+            {
+                TraceLogger.Log("Configuration update commands detected. Processing...", Enums.StatusSeverityType.Debug);
+                HandleConfigUpdates(result);
+                Environment.Exit(0);
             }
         }
 
         private static void HandleConfigUpdates(ArgumentResult result)
         {
+            TraceLogger.Log("Updating configuration based on command-line arguments...", Enums.StatusSeverityType.Debug);
             var config = ConfigManager.Instance;
             var settingsPath = IOManager.SettingJsonFileLocation;
 
@@ -535,6 +546,7 @@ namespace HostlistDownloader.Modules.ArgumentParsing
                     config.SaveToDisk(settingsPath);
                     TraceLogger.Log("Configuration saved to disk.");
                 }
+                TraceLogger.Log("Configuration update completed successfully.", Enums.StatusSeverityType.Information);
             }
             catch (Exception ex)
             {
