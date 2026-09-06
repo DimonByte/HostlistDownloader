@@ -49,6 +49,7 @@ namespace HostlistDownloader.Modules
         public const int TaskThreadTimeout = 43;
         // Environment errors
         public const int WrongExecutionDirectory = 50;
+        public const int UpdateInProgress = 51; //Thrown when updater has completed downloading update and is closed for the powershell script to replace exe. If this error happens again, there is a problem with the updater or the powershell script.
 
         // Helper method to get error description
         public static string GetDescription(int errorCode)
@@ -66,6 +67,7 @@ namespace HostlistDownloader.Modules
                 WrongExecutionDirectory => "Program executed from incorrect directory",
                 TaskThreadTimeout => "A multi-threaded task has reached a timeout threshold",
                 IntegrityCheckFailure => "Data validation check failed",
+                UpdateInProgress => "Update is currently in progress",
                 _ => "Unknown error occurred"
             };
         }

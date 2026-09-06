@@ -53,12 +53,12 @@ To configure a task schedule to run silently, set up the task using the followin
 | | `/search <domain>` or `/s <domain>` | `<domain>` | Searches for a specific domain in the hostlists. |
 | | `/purge` or `/p` | (None) | Deletes all log files. |
 | | `/help` or `/h` or `/?` | (None) | Displays this help message. |
-| | `/update` | (None) | Checks for updates |
+| | `/update` | (None) | Checks for updates and downloads the latest version |
 | | `/debug` | (None) | Enables debug mode for detailed logging. |
 | | `/duplicatescan` or `/dupscan` | (None) | Checks each hostlist for duplicate entries, and outputs a percentage of duplicates found. Does not modify any files. |
 | | `/dupanalyse` or `/analysedup` | <source_file_name> | Analyses duplicate entries in the hostlists. |
 | | `/getsource` or `/gs` | <source_file_name> | Retrieves the source name for a given hostlist file name. |
-| | `/merge` or `/regenerate` or `/re` | (None)  | Regenerates the combined hostlist again without downloading the lists again, good when adding a new user-defined rule and then regenerating the combined lists without checking the internet again. |
+| | `/compile` or `/regenerate` or `/re` | (None)  | Regenerates the combined hostlist again without downloading the lists again, good when adding a new user-defined rule and then regenerating the combined lists without checking the internet again. |
 | | `/diff` | (None) | Checks last difference since last run (e.g. 230 lines added since last run.) |
 | | `/revert` | (None) | If enabled on settings.json, you can use this to revert to the previous combined lists |
 | | `/stats` | (None) | Prints out stats: Last updated on Lists, Number of Lines, Number of sources, etc. |

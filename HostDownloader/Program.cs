@@ -29,7 +29,7 @@ using HostlistDownloader.Modules.WindowsSystem;
 using System.Diagnostics;
 using System.Reflection;
 
-Console.WriteLine($"--HostlistDownloader-- [MIT License] ver:{Assembly.GetExecutingAssembly().GetName().Version} starting...");
+Console.WriteLine($"HostlistDownloader version {Assembly.GetExecutingAssembly().GetName().Version}\nCopyright (c) {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright} under MIT License. Uses other libraries which are subject to their own licenses.");
 Stopwatch watch = Stopwatch.StartNew();
 
 // Set current directory to application base directory
@@ -37,6 +37,7 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
 // Initialize necessary files/directories and config
 IOManager.CreateNecessaryDirectoriesAndFiles();
+TraceLogger.Log("[START] Initializing HostlistDownloader...");
 ConfigManager.Init(IOManager.SettingJsonFileLocation);
 IOManager.CheckForInvalidConfig();
 
@@ -45,7 +46,6 @@ ArgumentResult argsResult;
 try
 {
     argsResult = ArgumentParser.Parse(args);
-    // Apply immediate side effects (Quiet mode, Help, Purge)
     ArgumentParser.ApplySideEffects(argsResult);
     TraceLogger.DebugMode = argsResult.DebugMode;
 }
@@ -56,24 +56,19 @@ catch (ArgumentException ex)
     return; //Although the environment exits, the return here prevents "Use of unassigned local variable 'argsResult'" error in solution error check.
 }
 
-// Handle Search Command separately
 if (argsResult.SearchDomain != null)
 {
     SearchManager.Search(argsResult.SearchDomain);
     return;
 }
 
-// Check network availability
 if (!NetworkChecker.IsNetworkAvailable())
 {
     TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ErrorCodes.NetworkConnectionFailed);
 }
-
-// Clear expired logs before main processing
 TraceLogger.ClearExpiredLogs();
-
-// Execute Main Update Loop
 bool freshMode = argsResult.IsFresh;
+
 HostListManager.StartListProcessing(freshMode);
 
 watch.Stop();
@@ -81,37 +76,42 @@ watch.Stop();
 // Handle Post-Update Status
 if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
+    Console.ForegroundColor = ConsoleColor.Green;
     ListUpdateStats();
-    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.");
+    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.", Enums.StatusSeverityType.Important);
 }
 else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
+    Console.ForegroundColor = ConsoleColor.Yellow;
     ListUpdateStats();
-    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully and compiled in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.");
+    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully and compiled in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
 }
 else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedUpdates)
 {
+    Console.ForegroundColor = ConsoleColor.Cyan;
     ListUpdateStats();
-    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (Time taken: {watch.Elapsed.TotalSeconds} seconds.)");
+    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (Time taken: {watch.Elapsed.TotalSeconds} seconds.)", Enums.StatusSeverityType.Important);
 }
 else // Problem and no downloads
 {
+    Console.ForegroundColor = ConsoleColor.Red;
     ListUpdateStats();
     TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.UpdateProcessError;
 }
 
-UpdateChecker.IsUpdateAvailable();
-
 Console.BackgroundColor = ConsoleColor.Black;
 Console.ForegroundColor = ConsoleColor.White;
 
+UpdateChecker.IsUpdateAvailable();
+
 static void ListUpdateStats()
 {
-    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}");
+    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}", Enums.StatusSeverityType.Important);
     foreach (var stat in HostListManager.UpdateStatistics)
     {
-        TraceLogger.Log($"[STATS] {stat}");
+        TraceLogger.Log($"[STATS] {stat}", Enums.StatusSeverityType.Important);
     }
 }
+TraceLogger.Log($"[END OF LOG]");

@@ -22,6 +22,7 @@
 
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem;
+using iluvadev.ConsoleProgressBar;
 using System.Diagnostics;
 using System.Net;
 
@@ -31,9 +32,9 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
     {
         public static void BeginTransformation(string combinedFileLocation) //Cool name.
         {
-            TraceLogger.Log("[Step 1] Starting Transformation... Removing duplicates...");
+            TraceLogger.Log("Starting Transformation... Removing duplicates...");
             RemoveDuplicates(combinedFileLocation);
-            TraceLogger.Log("[Step 2] Formatting hosts...");
+            TraceLogger.Log("Formatting hosts...");
             FormatHosts(combinedFileLocation);
             TraceLogger.Log("Transformation complete.");
         }
@@ -73,146 +74,166 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             int wildcardPreserved = 0;
             int wildcardRemoved = 0;
 
-            foreach (var line in originalLines)
+            int max = originalLines.Length;
+
+            //Create the ProgressBar
+            using (var pb = new ProgressBar() { Maximum = max })
             {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
-                    continue;
+                //Clear "Description Text"
+                pb.Text.Description.Clear();
 
-                var trimmedLine = line.Trim();
-                int commentIndex = trimmedLine.IndexOf('#');
-                if (commentIndex >= 0)
+                //Setting "Description Text" when "Processing"
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Formatting line: {pb.ElementName}");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Lines remaining: {pb.Value}");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
+
+                //Setting "Description Text" when "Done"
+                pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} lines formatted in {pb.TimeProcessing.TotalSeconds}s.");
+
+                foreach (var line in originalLines)
                 {
-                    trimmedLine = trimmedLine[..commentIndex].Trim();
-                }
+                    //Thread.Sleep(5);
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                        continue;
 
-                if (string.IsNullOrWhiteSpace(trimmedLine))
-                    continue;
-
-                var parts = trimmedLine.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-                string? validIp = null;
-                string domainList = "";
-
-                if (parts.Length >= 2)
-                {
-                    if (IPAddress.TryParse(parts[0], out var parsedIp))
+                    var trimmedLine = line.Trim();
+                    int commentIndex = trimmedLine.IndexOf('#');
+                    if (commentIndex >= 0)
                     {
-                        validIp = parsedIp.ToString();
-                        domainList = string.Join(" ", parts.Skip(1));
+                        trimmedLine = trimmedLine[..commentIndex].Trim();
                     }
-                    else
+
+                    if (string.IsNullOrWhiteSpace(trimmedLine))
+                        continue;
+
+                    var parts = trimmedLine.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+                    string? validIp = null;
+                    string domainList = "";
+
+                    if (parts.Length >= 2)
                     {
-                        TraceLogger.Log($"Malformed hosts entry (invalid/missing IP): '{trimmedLine}'. Formatting as domain-only.", Enums.StatusSeverityType.Warning);
-                        domainList = trimmedLine.Replace('\t', ' ').Trim();
-                    }
-                }
-                else if (parts.Length == 1)
-                {
-                    domainList = parts[0];
-                }
-
-                // Detect wildcard entries (e.g. "*.example.com" or "0.0.0.0 *.example.com")
-                bool isWildcard = domainList.Contains("*.") || trimmedLine.Contains("*.");
-
-                switch (formatType)
-                {
-                    case "hosts":
-                    case "host":
-                    case "pihole":
-                    case "pi-hole":
-                        if (isWildcard)
+                        if (IPAddress.TryParse(parts[0], out var parsedIp))
                         {
-                            wildcardRemoved++;
-                            continue; // Wildcards are not valid hostnames; skip for hosts/pihole
+                            validIp = parsedIp.ToString();
+                            domainList = string.Join(" ", parts.Skip(1));
                         }
-                        formattedLines.Add(validIp is not null ? $"{validIp} {domainList}" : $"0.0.0.0 {domainList}");
-                        break;
-
-                    case "domain":
-                        if (isWildcard)
+                        else
                         {
-                            // Strip the "*." prefix so the base domain is still usable
-                            domainList = domainList.Replace("*.", "").Trim();
-                            if (string.IsNullOrEmpty(domainList))
+                            TraceLogger.Log($"Malformed hosts entry (invalid/missing IP): '{trimmedLine}'. Formatting as domain-only.", Enums.StatusSeverityType.Warning);
+                            domainList = trimmedLine.Replace('\t', ' ').Trim();
+                        }
+                    }
+                    else if (parts.Length == 1)
+                    {
+                        domainList = parts[0];
+                    }
+
+                    // Detect wildcard entries (e.g. "*.example.com" or "0.0.0.0 *.example.com")
+                    bool isWildcard = domainList.Contains("*.") || trimmedLine.Contains("*.");
+
+                    switch (formatType)
+                    {
+                        case "hosts":
+                        case "host":
+                        case "pihole":
+                        case "pi-hole":
+                            if (isWildcard)
                             {
                                 wildcardRemoved++;
-                                continue;
+                                continue; // Wildcards are not valid hostnames; skip for hosts/pihole
                             }
-                            wildcardRemoved++;
-                        }
-                        formattedLines.Add(domainList);
-                        break;
+                            formattedLines.Add(validIp is not null ? $"{validIp} {domainList}" : $"0.0.0.0 {domainList}");
+                            break;
 
-                    case "iponly":
-                        if (isWildcard)
-                        {
-                            wildcardRemoved++;
-                            continue; // No IP to extract from a wildcard entry
-                        }
-                        if (validIp is not null && !string.Equals(validIp, "0.0.0.0", StringComparison.OrdinalIgnoreCase))
-                        {
-                            formattedLines.Add(validIp);
-                        }
-                        break;
-
-                    case "ublock":
-                    case "ublockorigin":
-                    case "uBlock":
-                    case "uBlock Origin":
-                        if (isWildcard)
-                        {
-                            // Preserve wildcard entries — valid uBlock filter syntax
+                        case "domain":
+                            if (isWildcard)
+                            {
+                                // Strip the "*." prefix so the base domain is still usable
+                                domainList = domainList.Replace("*.", "").Trim();
+                                if (string.IsNullOrEmpty(domainList))
+                                {
+                                    wildcardRemoved++;
+                                    continue;
+                                }
+                                wildcardRemoved++;
+                            }
                             formattedLines.Add(domainList);
-                            wildcardPreserved++;
-                        }
-                        else
-                        {
-                            // Standard uBlock filter rule
-                            formattedLines.Add($"||{domainList}^");
-                        }
-                        break;
+                            break;
 
-                    case "adguard":
-                    case "ad-guard":
-                    case "AdGuard":
-                        if (isWildcard)
-                        {
-                            // Preserve wildcard entries — valid AdGuard filter syntax
+                        case "iponly":
+                            if (isWildcard)
+                            {
+                                wildcardRemoved++;
+                                continue; // No IP to extract from a wildcard entry
+                            }
+                            if (validIp is not null && !string.Equals(validIp, "0.0.0.0", StringComparison.OrdinalIgnoreCase))
+                            {
+                                formattedLines.Add(validIp);
+                            }
+                            break;
+
+                        case "ublock":
+                        case "ublockorigin":
+                        case "uBlock":
+                        case "uBlock Origin":
+                            if (isWildcard)
+                            {
+                                // Preserve wildcard entries — valid uBlock filter syntax
+                                formattedLines.Add(domainList);
+                                wildcardPreserved++;
+                            }
+                            else
+                            {
+                                // Standard uBlock filter rule
+                                formattedLines.Add($"||{domainList}^");
+                            }
+                            break;
+
+                        case "adguard":
+                        case "ad-guard":
+                        case "AdGuard":
+                            if (isWildcard)
+                            {
+                                // Preserve wildcard entries — valid AdGuard filter syntax
+                                formattedLines.Add(domainList);
+                                wildcardPreserved++;
+                            }
+                            else
+                            {
+                                // Standard AdGuard filter rule
+                                formattedLines.Add($"||{domainList}^");
+                            }
+                            break;
+
+                        case "dnsmasq":
+                            if (isWildcard)
+                            {
+                                wildcardRemoved++;
+                                continue; // dnsmasq address= rules require a concrete domain
+                            }
+                            formattedLines.Add($"address=/{domainList}/0.0.0.0");
+                            break;
+
+                        case "wildcard":
+                            // This format explicitly prepends "*." to every domain
+                            if (!domainList.StartsWith("*."))
+                            {
+                                formattedLines.Add($"*.{domainList}");
+                            }
+                            else
+                            {
+                                formattedLines.Add(domainList);
+                            }
+                            break;
+                        case "raw": //Ignores all formatting rules and preserves the original line as-is (after trimming comments and whitespace)
+                            formattedLines.Add(trimmedLine);
+                            break;
+                        default:
                             formattedLines.Add(domainList);
-                            wildcardPreserved++;
-                        }
-                        else
-                        {
-                            // Standard AdGuard filter rule
-                            formattedLines.Add($"||{domainList}^");
-                        }
-                        break;
-
-                    case "dnsmasq":
-                        if (isWildcard)
-                        {
-                            wildcardRemoved++;
-                            continue; // dnsmasq address= rules require a concrete domain
-                        }
-                        formattedLines.Add($"address=/{domainList}/0.0.0.0");
-                        break;
-
-                    case "wildcard":
-                        // This format explicitly prepends "*." to every domain
-                        if (!domainList.StartsWith("*."))
-                        {
-                            formattedLines.Add($"*.{domainList}");
-                        }
-                        else
-                        {
-                            formattedLines.Add(domainList);
-                        }
-                        break;
-                    case "raw": //Ignores all formatting rules and preserves the original line as-is (after trimming comments and whitespace)
-                        formattedLines.Add(trimmedLine);
-                        break;
-                    default:
-                        formattedLines.Add(domainList);
-                        break;
+                            break;
+                    }
+                    pb.PerformStep(domainList);
                 }
             }
 
@@ -220,7 +241,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             {
                 TraceLogger.Log($"Formatting Complete. Saving {formattedLines.Count:N0} lines to {combinedFileLocation}");
                 File.WriteAllLines(combinedFileLocation, formattedLines);
-
+                TraceLogger.Log($"Saved {formattedLines.Count:N0} lines to {combinedFileLocation}", Enums.StatusSeverityType.Important);
                 if (wildcardPreserved > 0)
                     TraceLogger.Log($"Preserved {wildcardPreserved:N0} wildcard (*.) entries for {formatType} format.");
                 if (wildcardRemoved > 0)
@@ -253,26 +274,53 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 var cleanedLines = new List<string>();
                 int emptyRemoved = 0;
 
-                foreach (var rawLine in originalLines)
+                int max = originalLines.Length;
+
+                //Create the ProgressBar
+                using (var pb = new ProgressBar() { Maximum = max })
                 {
-                    // Trim leading/trailing whitespace (normalizes inconsistent source formatting)
-                    var line = rawLine.Trim();
+                    //Clear "Description Text"
+                    pb.Text.Description.Clear();
 
-                    // Skip empty and whitespace-only lines
-                    if (line.Length == 0)
-                    {
-                        emptyRemoved++;
-                        continue;
-                    }
+                    //Setting "Description Text" when "Processing"
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Removing duplicates: {pb.ElementName}");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Line count: {pb.Value}");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
 
-                    // Case-insensitive dedup on the trimmed line
-                    if (seen.Add(line))
+                    //Setting "Description Text" when "Done"
+                    pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} elements in {pb.TimeProcessing.TotalSeconds}s.");
+
+                    foreach (var rawLine in originalLines)
                     {
-                        cleanedLines.Add(line);
+                        // Trim leading/trailing whitespace (normalizes inconsistent source formatting)
+                        var line = rawLine.Trim();
+
+                        // Skip empty and whitespace-only lines
+                        if (line.Length == 0)
+                        {
+                            emptyRemoved++;
+                            continue;
+                        }
+
+                        // Case-insensitive dedup on the trimmed line
+                        if (seen.Add(line))
+                        {
+                            cleanedLines.Add(line);
+                        }
+                        pb.PerformStep(line);
                     }
                 }
 
-                File.WriteAllLines(MergedFileLoc, cleanedLines);
+                try
+                {
+                    File.WriteAllLines(MergedFileLoc, cleanedLines);
+                    TraceLogger.Log($"Removed duplicates and empty lines. Saved {cleanedLines.Count:N0} unique lines to {MergedFileLoc}", Enums.StatusSeverityType.Important);
+                }
+                catch (Exception ex)
+                {
+                    TraceLogger.Log($"Error writing cleaned lines to {MergedFileLoc}: {ex}", Enums.StatusSeverityType.Error);
+                }
 
                 watch.Stop();
 

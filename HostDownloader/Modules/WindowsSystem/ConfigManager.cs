@@ -231,7 +231,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 string json = JsonSerializer.Serialize(settings, SettingsJsonSerializerContext.Default.Settings);
                 File.WriteAllText(filePath, json);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 TraceLogger.Log($"Failed to save configuration to '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ErrorCodes.GeneralError);
             }

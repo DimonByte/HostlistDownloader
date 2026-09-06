@@ -40,7 +40,8 @@ namespace HostlistDownloader.Modules.Network
         TransientFailure,
         PermanentFailure,
         Cancelled,
-        DownloadBlockedByConfig
+        DownloadBlockedByConfig,
+        NotStarted
     }
 
     internal class DownloadController
@@ -123,7 +124,7 @@ namespace HostlistDownloader.Modules.Network
                         }
                         else
                         {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag differs or missing, will proceed with download.");
+                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag differs or missing, will proceed with download.", Enums.StatusSeverityType.Debug);
                         }
                     }
                 }
@@ -141,12 +142,12 @@ namespace HostlistDownloader.Modules.Network
             {
                 try
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Downloading to {normalizedLocalPath} (Attempt {attempt}/{MaxRetries})...");
+                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Downloading to {normalizedLocalPath} (Attempt {attempt}/{MaxRetries})...", Enums.StatusSeverityType.Debug);
                     string? directory = Path.GetDirectoryName(normalizedLocalPath);
                     if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     {
                         Directory.CreateDirectory(directory);
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Directory created: {directory}");
+                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Directory created: {directory}", Enums.StatusSeverityType.Debug);
                     }
 
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

@@ -58,11 +58,9 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             TraceLogger.Log($"Searching configured lists for '{domain}'...");
 
-            // 1. Scan downloaded system blocklists & whitelists
             var blockMatches = SearchFolder(IOManager.BlockListFolderLocation, domain, MatchListType.Blocklist);
             var whiteMatches = SearchFolder(IOManager.WhiteListFolderLocation, domain, MatchListType.Whitelist);
 
-            // 2. Scan user-defined lists from settings.json
             if (ConfigManager.Instance != null)
             {
                 foreach (var entry in ConfigManager.Instance.UserWebsiteBlocklist ?? [])

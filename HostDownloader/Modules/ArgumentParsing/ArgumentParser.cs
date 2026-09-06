@@ -52,6 +52,7 @@ GLOBAL ARGUMENTS:
   /update                    Check for application updates.
   /diff                      Show differences from the previous hostlist version.
   /revert                    Revert to the previous hostlist version.
+  /stats                    Generate a statistics report of the last run.
 
 HOSTLIST MANAGEMENT:
   /addblocklist <url>, /ab  Add a new blocklist source.
@@ -129,7 +130,7 @@ USER-DEFINED RULES:
                     updateCheck = true;
                 }
 
-                if (arg.Equals("/merge", StringComparison.OrdinalIgnoreCase) ||
+                if (arg.Equals("/compile", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/regenerate", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/re", StringComparison.OrdinalIgnoreCase))
                 {
@@ -310,7 +311,6 @@ USER-DEFINED RULES:
                 Environment.Exit(0);
             }
 
-
             if (result.RevertLists)
             {
                 TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
@@ -337,12 +337,12 @@ USER-DEFINED RULES:
                     //Check if diffResult is a number only
                     else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
                     {
-                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Important);
                     }
                     else
                     {
                         TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
-                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Information);
+                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Important);
                     }
                 }
                 catch (Exception ex)
@@ -361,7 +361,10 @@ USER-DEFINED RULES:
                 TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    UpdateChecker.IsUpdateAvailable();
+                    if (UpdateChecker.IsUpdateAvailable())
+                    {
+                        UpdateChecker.BeginUpdateReplacement().Wait();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -414,7 +417,7 @@ USER-DEFINED RULES:
                 try
                 {
                     IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
-                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Information);
+                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Important);
                 }
                 catch (Exception ex)
                 {
@@ -437,17 +440,17 @@ USER-DEFINED RULES:
                     }
                     else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Important);
                         string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Important);
                     }
                     else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Important);
                         string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Information);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Important);
                     }
                 }
                 catch (Exception ex)
@@ -546,7 +549,7 @@ USER-DEFINED RULES:
                     config.SaveToDisk(settingsPath);
                     TraceLogger.Log("Configuration saved to disk.");
                 }
-                TraceLogger.Log("Configuration update completed successfully.", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("Configuration update completed successfully.", Enums.StatusSeverityType.Important);
             }
             catch (Exception ex)
             {

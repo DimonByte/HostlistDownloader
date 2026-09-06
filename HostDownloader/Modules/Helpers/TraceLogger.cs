@@ -35,11 +35,14 @@ namespace HostlistDownloader.Modules.Helpers
         /// </summary>
         public static bool QuietMode = false;
         public static bool DebugMode = false;
+        //public static bool ProgressBarOnScreen = false; //Used to prevent tracelogger from writing to console while a progress bar is on screen, which would break the progress bar display.
 
         private static readonly Lock _lock = new();
         private static readonly string _logDirectory = IOManager.LogsLocation;
         private static string _currentDate = DateTime.Now.ToString("dd-MM-yyyy");
         private static DateTime _lastDateCheck = DateTime.MinValue;
+        //private static List<string> _pendingLogs = [];
+        //private static List<Enums.StatusSeverityType> _pendingLogSeverities = [];
 
         public static void PurgeAllLogs()
         {
@@ -128,7 +131,7 @@ namespace HostlistDownloader.Modules.Helpers
 
             // 1. Determine console output behavior explicitly
             bool suppressedByQuietMode = QuietMode && (severity is StatusSeverityType.Information or StatusSeverityType.Debug);
-            bool suppressedByDebugMode = !DebugMode && severity == StatusSeverityType.Debug;
+            bool suppressedByDebugMode = !DebugMode && severity == StatusSeverityType.Debug || severity == StatusSeverityType.Information;
             bool shouldPrintToConsole = !suppressedByQuietMode && !suppressedByDebugMode;
 
             // 2. Handle console output (if allowed)
@@ -144,7 +147,6 @@ namespace HostlistDownloader.Modules.Helpers
                         case StatusSeverityType.Warning: Console.ForegroundColor = ConsoleColor.Yellow; break;
                         case StatusSeverityType.Error: Console.ForegroundColor = ConsoleColor.Red; break;
                         case StatusSeverityType.Fatal: Console.ForegroundColor = ConsoleColor.White; Console.BackgroundColor = ConsoleColor.Red; break;
-                        default: Console.ForegroundColor = ConsoleColor.Gray; break;
                     }
                     Console.WriteLine(logEntry);
                 }
@@ -154,6 +156,12 @@ namespace HostlistDownloader.Modules.Helpers
                     Console.BackgroundColor = originalBackground;
                 }
             }
+
+            //if (ProgressBarOnScreen)
+            //{
+            //    WriteToPendingLog(message, severity);
+            //    _pendingLogSeverities.Add(severity);
+            //}
 
             // 3. Write to file (unaffected by DebugMode or QuietMode)
             lock (_lock)
@@ -174,5 +182,51 @@ namespace HostlistDownloader.Modules.Helpers
                 Environment.Exit(PassedErrorCode);
             }
         }
+
+        //private static void WriteToPendingLog(string message, Enums.StatusSeverityType severityType)
+        //{
+        //    _pendingLogs.Add($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{severityType}] {message}");
+        //}
+
+        //public static void PrintPendingLog()
+        //{
+        //    ProgressBarOnScreen = false;
+        //    try
+        //    {
+        //        for (int i = 0; i < _pendingLogs.Count; i++)
+        //        {
+        //            string logEntry = _pendingLogs[i];
+        //            Enums.StatusSeverityType severityType = _pendingLogSeverities[i];
+        //            ConsoleColor originalForeground = Console.ForegroundColor;
+        //            ConsoleColor originalBackground = Console.BackgroundColor;
+        //            try
+        //            {
+        //                switch (severityType)
+        //                {
+        //                    case Enums.StatusSeverityType.Information: Console.ForegroundColor = ConsoleColor.White; break;
+        //                    case Enums.StatusSeverityType.Warning: Console.ForegroundColor = ConsoleColor.Yellow; break;
+        //                    case Enums.StatusSeverityType.Error: Console.ForegroundColor = ConsoleColor.Red; break;
+        //                    case Enums.StatusSeverityType.Fatal: Console.ForegroundColor = ConsoleColor.White; Console.BackgroundColor = ConsoleColor.Red; break;
+        //                    default: Console.ForegroundColor = ConsoleColor.Gray; break;
+        //                }
+        //                //Check if debug is not enabled and the severity is debug, if so, skip printing to console
+        //                if (!DebugMode)
+        //                {
+        //                    continue;
+        //                }
+        //                Console.WriteLine(logEntry);
+        //            }
+        //            finally
+        //            {
+        //                Console.ForegroundColor = originalForeground;
+        //                Console.BackgroundColor = originalBackground;
+        //            }
+        //        }
+        //    }
+        //    catch(Exception ex)
+        //    {
+        //        Log($"Failed to print pending logs: {ex}", StatusSeverityType.Error);
+        //    }
+        //}
     }
 }

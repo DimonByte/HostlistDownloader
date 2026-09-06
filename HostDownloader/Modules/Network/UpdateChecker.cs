@@ -21,6 +21,7 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using System.Diagnostics;
 using System.Net;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -29,25 +30,116 @@ namespace HostlistDownloader.Modules.Network
 {
     internal class UpdateChecker
     {
-        public static void IsUpdateAvailable()
+        private static readonly string OwnerRepo = "DimonByte/HostlistDownloader";
+        public static async Task BeginUpdateReplacement()
         {
-            TraceLogger.Log("Checking for updates...", Enums.StatusSeverityType.Debug);
+            TraceLogger.Log($"[UPDATE] Starting update replacement process...", Enums.StatusSeverityType.Information);
+
+            try
+            {
+                string latestReleaseTag = GetLatestReleaseTag(OwnerRepo);
+
+                if (string.IsNullOrEmpty(latestReleaseTag))
+                {
+                    TraceLogger.Log("Unable to determine latest release tag.", Enums.StatusSeverityType.Error);
+                    return;
+                }
+
+                if (latestReleaseTag.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                {
+                    latestReleaseTag = latestReleaseTag[1..];
+                }
+
+                string downloadUrl = $"https://github.com/{OwnerRepo}/releases/download/v{latestReleaseTag}/HostlistDownloader.exe";
+                string currentExecutablePath = Assembly.GetExecutingAssembly().Location;
+                string tempUpdatePath = Path.Combine(Path.GetDirectoryName(currentExecutablePath), "HostlistDownloader_update.exe");
+
+                TraceLogger.Log($"Downloading update from: {downloadUrl}", Enums.StatusSeverityType.Debug);
+
+                using (HttpClient client = new())
+                {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("HostlistDownloader-Updater/1.0");
+                    var response = await client.GetAsync(downloadUrl);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        TraceLogger.Log($"Failed to download update: {(int)response.StatusCode} {response.ReasonPhrase}", Enums.StatusSeverityType.Error);
+                        return;
+                    }
+
+                    using (var fileStream = new FileStream(tempUpdatePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        await response.Content.CopyToAsync(fileStream);
+                    }
+                }
+
+                TraceLogger.Log("Download complete. Running PowerShell script to replace executable...", Enums.StatusSeverityType.Information);
+
+                string psScript = $@"
+                # Wait 5 seconds then replace the executable
+                Start-Sleep -Seconds 5
+
+                # Get the current process ID
+                $CurrentProcessId = [System.Diagnostics.Process]::GetCurrentProcess().Id
+
+                # Wait for the current process to finish (if it's still running)
+                do {{
+                    $process = Get-Process -Id $CurrentProcessId -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 1
+                }} while ($process -ne $null)
+
+                # Replace the executable
+                $sourcePath = '{tempUpdatePath.Replace("\\", "\\\\")}'
+                $destinationPath = '{currentExecutablePath.Replace("\\", "\\\\")}'
+
+                if (Test-Path $sourcePath) {{
+                    if (Test-Path $destinationPath) {{
+                        Remove-Item $destinationPath -Force
+                    }}
+                    Move-Item $sourcePath $destinationPath
+                    Write-Output 'Update completed successfully'
+                }} else {{
+                    Write-Error 'Source file not found: $sourcePath'
+                }}
+                Start-Sleep -Seconds 5
+                ";
+
+                string psScriptPath = Path.Combine(Path.GetDirectoryName(currentExecutablePath), "update_script.ps1");
+                File.WriteAllText(psScriptPath, psScript);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-ExecutionPolicy Bypass -File \"{psScriptPath}\"",
+                    UseShellExecute = true,
+                    CreateNoWindow = true
+                });
+
+                TraceLogger.Log("[UPDATE] PowerShell script started. Current process will now exit, please wait 5 seconds for update to complete...", Enums.StatusSeverityType.Information);
+                Environment.Exit(ErrorCodes.UpdateInProgress);
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"[UPDATE ERROR] Failed to perform update replacement: {ex}", Enums.StatusSeverityType.Error);
+            }
+        }
+
+        public static bool IsUpdateAvailable()
+        {
+            TraceLogger.Log("Checking for HostlistDownloader updates...", Enums.StatusSeverityType.Debug);
             //Get version number of current program
             string? CurrentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString();
             if (string.IsNullOrEmpty(CurrentVersion))
             {
                 TraceLogger.Log("Unable to determine current version.", Enums.StatusSeverityType.Error);
-                return;
+                return false;
             }
-            string LatestReleaseTag = GetLatestReleaseTag("DimonByte/HostlistDownloader");
+            string LatestReleaseTag = GetLatestReleaseTag(OwnerRepo);
 
             if (string.IsNullOrEmpty(LatestReleaseTag))
             {
                 TraceLogger.Log("Unable to determine latest release tag.", Enums.StatusSeverityType.Error);
-                return;
+                return false;
             }
 
-            // Remove leading 'v' if present
             if (LatestReleaseTag.StartsWith("v", StringComparison.OrdinalIgnoreCase))
             {
                 LatestReleaseTag = LatestReleaseTag[1..];
@@ -59,21 +151,22 @@ namespace HostlistDownloader.Modules.Network
             {
                 if (latestVer > currentVer)
                 {
-                    TraceLogger.Log($"[UPDATE AVAILABLE] A HostlistDownloader update is available! {latestVer} > {currentVer}", Enums.StatusSeverityType.Information);
-                    TraceLogger.Log($"Please visit https://github.com/DimonByte/HostlistDownloader to download the latest version.", Enums.StatusSeverityType.Information);
-                    return;
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    TraceLogger.Log($"[UPDATE AVAILABLE] A HostlistDownloader update is available! {latestVer} > {currentVer}", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"Use /update command to update automatically or visit https://github.com/DimonByte/HostlistDownloader to download the latest version.", Enums.StatusSeverityType.Important);
+                    return true;
                 }
                 else
                 {
                     TraceLogger.Log($"[NO UPDATE] No update available: {latestVer} <= {currentVer}", Enums.StatusSeverityType.Debug);
-                    return;
+                    return false;
                 }
             }
             else
             {
                 TraceLogger.Log($"Failed to parse version numbers. Current: {CurrentVersion}, Latest: {LatestReleaseTag}", Enums.StatusSeverityType.Error);
             }
-            return;
+            return false;
         }
         private static string GetLatestReleaseTag(string ownerRepo)
         {

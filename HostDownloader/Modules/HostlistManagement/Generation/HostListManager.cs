@@ -23,6 +23,7 @@
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
+using iluvadev.ConsoleProgressBar;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -135,7 +136,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             }
             CommitToMasterLists();
 
-            TraceLogger.Log("Host lists update completed!");
+            TraceLogger.Log("Host lists update completed!", Enums.StatusSeverityType.Important);
         }
         /// <summary>
         /// Commits the temporary generated hostfile files to the final master version.
@@ -200,7 +201,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                     File.Create(file).Dispose();
                 }
                 TraceLogger.Log("Temporary combined lists cleared after committing to final locations.", Enums.StatusSeverityType.Debug);
-                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines");
+                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines", Enums.StatusSeverityType.Important);
                 //Save diff to UpdateStatistics.txt
                 File.WriteAllLines(IOManager.UpdateStatsLocation, [$"{tempCombinedList - finalCombinedList}"]);
             }
@@ -303,6 +304,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
             GenerateTemporaryCombinedList();
             CommitToMasterLists();
+            Environment.Exit(0);
         }
 
         private static void MergeUserDefinedDomains(string CombinedLocation, bool isBlocklist)
@@ -324,29 +326,48 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
                 var newEntries = new List<string>();
 
-                foreach (var rawLine in userDefinedLines)
+                int max = userDefinedLines.Count;
+
+                //Create the ProgressBar
+                using (var pb = new ProgressBar() { Maximum = max })
                 {
-                    string trimmed = rawLine.Trim();
-                    if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
-                    {
-                        continue;
-                    }
+                    //Clear "Description Text"
+                    pb.Text.Description.Clear();
+                    string blockorwhite = isBlocklist ? "blocklist" : "whitelist";
+                    //Setting "Description Text" when "Processing"
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Merging user defined {blockorwhite}: {pb.ElementName}");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processed: {pb.Value}");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
+                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
 
-                    bool isWildcard = trimmed.StartsWith('*') || trimmed.EndsWith('*');
+                    //Setting "Description Text" when "Done"
+                    pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} elements in {pb.TimeProcessing.TotalSeconds}s.");
 
-                    // Wildcard entries (e.g. "*.example.com") aren't deduplicated against the combined list
-                    // since they aren't a literal line match, but duplicate wildcard entries within the
-                    // user's own list are still skipped.
-                    if (isWildcard)
+                    foreach (var rawLine in userDefinedLines)
                     {
-                        if (existingCombinedLines.Add(trimmed))
+                        string trimmed = rawLine.Trim();
+                        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                        {
+                            continue;
+                        }
+
+                        bool isWildcard = trimmed.StartsWith('*') || trimmed.EndsWith('*');
+
+                        // Wildcard entries (e.g. "*.example.com") aren't deduplicated against the combined list
+                        // since they aren't a literal line match, but duplicate wildcard entries within the
+                        // user's own list are still skipped.
+                        if (isWildcard)
+                        {
+                            if (existingCombinedLines.Add(trimmed))
+                            {
+                                newEntries.Add(trimmed);
+                            }
+                        }
+                        else if (existingCombinedLines.Add(trimmed))
                         {
                             newEntries.Add(trimmed);
                         }
-                    }
-                    else if (existingCombinedLines.Add(trimmed))
-                    {
-                        newEntries.Add(trimmed);
+                        pb.PerformStep(trimmed);
                     }
                 }
 
@@ -407,85 +428,117 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             // source URL rather than just an internal "3 - hosts.txt" filename.
             var sourceManifest = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
 
-            foreach (var url in allUrls)
+            int max = allUrls.Count;
+
+            //Create the ProgressBar
+            using (var pb = new ProgressBar() { Maximum = max })
             {
-                var threadCount = ++completedCount;
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                //Clear "Description Text"
+                pb.Text.Description.Clear();
+
+                //Setting "Description Text" when "Processing"
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Downloading: {pb.ElementName}");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Number of URLs processed: {pb.Value}");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
+
+                //Setting "Description Text" when "Done"
+                pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} URLs downloaded in {pb.TimeProcessing.TotalSeconds}s.");
+
+
+                foreach (var url in allUrls)
                 {
-                    TraceLogger.Log($"Invalid or non-HTTP(S) URL skipped: {url}", Enums.StatusSeverityType.Warning);
-                    continue;
+                    Thread.Sleep(1);
+                    pb.PerformStep(url);
+                    var threadCount = ++completedCount;
+                    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                        (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    {
+                        TraceLogger.Log($"Invalid or non-HTTP(S) URL skipped: {url}", Enums.StatusSeverityType.Warning);
+                        continue;
+                    }
+
+                    var safeFileName = string.Join("_", uri.LocalPath.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+                    var fileName = $"{threadCount} - {safeFileName}";
+                    var filePath = Path.Combine(ListFolderLocation, fileName);
+
+                    if (!filePath.StartsWith(ListFolderLocation, StringComparison.OrdinalIgnoreCase))
+                    {
+                        TraceLogger.Log($"Path traversal attempt blocked: {url}", Enums.StatusSeverityType.Error);
+                        continue;
+                    }
+
+                    sourceManifest[fileName] = url;
+
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        bool acquired = false;
+                        try
+                        {
+                            await semaphore.WaitAsync(cancellationToken);
+                            acquired = true;
+                            TraceLogger.Log($"Added {fileName} to queue.", Enums.StatusSeverityType.Debug);
+                            var outcome = DownloadOutcome.NotStarted;
+                            //ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Processing {Path.GetFileName(url)}");
+                            outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, threadCount, cancellationToken);
+                            outcomes[url] = outcome;
+                            switch (outcome)
+                            {
+                                case DownloadOutcome.Success:
+                                    TraceLogger.Log($"{fileName} downloaded successfully.");
+                                    break;
+                                case DownloadOutcome.SkippedUpToDate:
+                                    TraceLogger.Log($"{fileName} already up to date, skipped.");
+                                    break;
+                                case DownloadOutcome.PermanentFailure:
+                                    ProblemDuringUpdate = true;
+                                    TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
+                                    break;
+                                case DownloadOutcome.TransientFailure:
+                                    ProblemDuringUpdate = true;
+                                    TraceLogger.Log($"Download of {url} failed after retries. This may succeed on a later run. Check logs for more details.", Enums.StatusSeverityType.Error);
+                                    break;
+                                case DownloadOutcome.Cancelled:
+                                    TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
+                                    break;
+                                case DownloadOutcome.DownloadBlockedByConfig:
+                                    ProblemDuringUpdate = true;
+                                    TraceLogger.Log($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).", Enums.StatusSeverityType.Warning);
+                                    break;
+                                case DownloadOutcome.NotStarted:
+                                    TraceLogger.Log($"Download of {url} was not started. This is unexpected and may indicate a bug.", Enums.StatusSeverityType.Error);
+                                    break;
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            outcomes[url] = DownloadOutcome.Cancelled;
+                            TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
+                        }
+                        catch (Exception ex)
+                        {
+                            outcomes[url] = DownloadOutcome.TransientFailure;
+                            ProblemDuringUpdate = true;
+                            TraceLogger.Log($"Failed to download {url}: {ex}", Enums.StatusSeverityType.Error);
+                        }
+                        finally
+                        {
+                            if (acquired)
+                            {
+                                semaphore.Release();
+                                TraceLogger.Log($"Semaphore released for {fileName} download task.", Enums.StatusSeverityType.Debug);
+                            }
+                        }
+                    }));
                 }
 
-                var safeFileName = string.Join("_", uri.LocalPath.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
-                var fileName = $"{threadCount} - {safeFileName}";
-                var filePath = Path.Combine(ListFolderLocation, fileName);
+                //for (int i = 0; i < max; i++)
+                //{
+                //    string elementName = Guid.NewGuid().ToString();
 
-                if (!filePath.StartsWith(ListFolderLocation, StringComparison.OrdinalIgnoreCase))
-                {
-                    TraceLogger.Log($"Path traversal attempt blocked: {url}", Enums.StatusSeverityType.Error);
-                    continue;
-                }
-
-                sourceManifest[fileName] = url;
-
-                tasks.Add(Task.Run(async () =>
-                {
-                    bool acquired = false;
-                    try
-                    {
-                        await semaphore.WaitAsync(cancellationToken);
-                        acquired = true;
-                        TraceLogger.Log($"Added {fileName} to queue.", Enums.StatusSeverityType.Debug);
-                        var outcome = await DownloadController.DownloadFileAsync(url, filePath, forceMode, threadCount, cancellationToken);
-                        outcomes[url] = outcome;
-                        ConsoleProgress.ShowOperationProgress(threadCount, allUrls.Count, $"Processing {Path.GetFileName(url)}");
-
-                        switch (outcome)
-                        {
-                            case DownloadOutcome.Success:
-                                TraceLogger.Log($"{fileName} downloaded successfully.");
-                                break;
-                            case DownloadOutcome.SkippedUpToDate:
-                                TraceLogger.Log($"{fileName} already up to date, skipped.");
-                                break;
-                            case DownloadOutcome.PermanentFailure:
-                                ProblemDuringUpdate = true;
-                                TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
-                                break;
-                            case DownloadOutcome.TransientFailure:
-                                ProblemDuringUpdate = true;
-                                TraceLogger.Log($"Download of {url} failed after retries. This may succeed on a later run. Check logs for more details.", Enums.StatusSeverityType.Error);
-                                break;
-                            case DownloadOutcome.Cancelled:
-                                TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
-                                break;
-                            case DownloadOutcome.DownloadBlockedByConfig:
-                                ProblemDuringUpdate = true;
-                                TraceLogger.Log($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).", Enums.StatusSeverityType.Warning);
-                                break;
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        outcomes[url] = DownloadOutcome.Cancelled;
-                        TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
-                    }
-                    catch (Exception ex)
-                    {
-                        outcomes[url] = DownloadOutcome.TransientFailure;
-                        ProblemDuringUpdate = true;
-                        TraceLogger.Log($"Failed to download {url}: {ex}", Enums.StatusSeverityType.Error);
-                    }
-                    finally
-                    {
-                        if (acquired)
-                        {
-                            semaphore.Release();
-                            TraceLogger.Log($"Semaphore released for {fileName} download task.", Enums.StatusSeverityType.Debug);
-                        }
-                    }
-                }));
+                //    Task.Delay(10).Wait(); //Do something
+                //    pb.PerformStep(elementName); //Step in ProgressBar. Setting current ElementName
+                //}
             }
             await Task.WhenAll(tasks);
 
@@ -510,8 +563,8 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 TraceLogger.Log($"Failed to write source manifest for {ListFolderLocation}: {ex.Message}", Enums.StatusSeverityType.Error);
             }
 
-            // NEW: Clean up any orphaned files that are no longer in the manifest
-            // (handles renumbering after URL removals, e.g. "3-C.txt" → "2-C.txt")
+            // Clean up any orphaned files that are no longer in the manifest
+            // (handles renumbering after URL removals, e.g. "3-C.txt" > "2-C.txt")
             SourceManager.CleanupOrphanedFiles(ListFolderLocation, manifestForSerialization);
 
             int succeeded = outcomes.Values.Count(o => o == DownloadOutcome.Success);
@@ -522,7 +575,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
             $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
             UpdateStatistics.Add(InternalUpdateStats);
-            TraceLogger.Log(InternalUpdateStats);
+            TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Important);
 
             if (transientFailures > 0)
             {

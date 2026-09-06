@@ -50,7 +50,6 @@ namespace HostlistDownloader.Modules.HostlistManagement
             var addedUrls = new List<string>();
             var removedFileNames = new List<string>();
 
-            // If there's no manifest yet (first run), everything is "new"
             if (!File.Exists(manifestPath))
             {
                 TraceLogger.Log($"No _sources.json found in {listFolderLocation}. Treating all {currentConfigUrls.Count} URL(s) as new (first run).", Enums.StatusSeverityType.Debug);
@@ -72,11 +71,11 @@ namespace HostlistDownloader.Modules.HostlistManagement
                 return (addedUrls, removedFileNames);
             }
 
-            // Build a lookup: URL → fileName from the previous manifest
+            // Build a lookup: URL > fileName from the previous manifest
             var previousUrlLookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kvp in previousSources)
             {
-                previousUrlLookup[kvp.Value] = kvp.Key; // url → fileName
+                previousUrlLookup[kvp.Value] = kvp.Key; // url > fileName
             }
 
             // Detect removed URLs: in previous manifest but NOT in current config
