@@ -61,7 +61,6 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
         private static ConfigManager? _instance;
 
-        // Properties are now immutable (init-only setters)
         public IReadOnlyList<string> Blocklists { get; init; }
         public IReadOnlyList<string> Whitelist { get; init; }
         public string Formattype { get; init; }

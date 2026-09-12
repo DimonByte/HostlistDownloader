@@ -52,7 +52,7 @@ namespace HostlistDownloader.Modules.Network
 
                 string downloadUrl = $"https://github.com/{OwnerRepo}/releases/download/v{latestReleaseTag}/HostlistDownloader.exe";
                 string currentExecutablePath = Assembly.GetExecutingAssembly().Location;
-                string tempUpdatePath = Path.Combine(Path.GetDirectoryName(currentExecutablePath), "HostlistDownloader_update.exe");
+                string tempUpdatePath = Path.Combine(Path.GetDirectoryName(currentExecutablePath) ?? "", "HostlistDownloader_update.exe");
 
                 TraceLogger.Log($"Downloading update from: {downloadUrl}", Enums.StatusSeverityType.Debug);
 
@@ -66,10 +66,8 @@ namespace HostlistDownloader.Modules.Network
                         return;
                     }
 
-                    using (var fileStream = new FileStream(tempUpdatePath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        await response.Content.CopyToAsync(fileStream);
-                    }
+                    using var fileStream = new FileStream(tempUpdatePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    await response.Content.CopyToAsync(fileStream);
                 }
 
                 TraceLogger.Log("Download complete. Running PowerShell script to replace executable...", Enums.StatusSeverityType.Information);
@@ -103,7 +101,7 @@ namespace HostlistDownloader.Modules.Network
                 Start-Sleep -Seconds 5
                 ";
 
-                string psScriptPath = Path.Combine(Path.GetDirectoryName(currentExecutablePath), "update_script.ps1");
+                string psScriptPath = Path.Combine(Path.GetDirectoryName(currentExecutablePath) ?? "", "update_script.ps1");
                 File.WriteAllText(psScriptPath, psScript);
                 Process.Start(new ProcessStartInfo
                 {
@@ -152,8 +150,8 @@ namespace HostlistDownloader.Modules.Network
                 if (latestVer > currentVer)
                 {
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    TraceLogger.Log($"[UPDATE AVAILABLE] A HostlistDownloader update is available! {latestVer} > {currentVer}", Enums.StatusSeverityType.Important);
-                    TraceLogger.Log($"Use /update command to update automatically or visit https://github.com/DimonByte/HostlistDownloader to download the latest version.", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"[UPDATE AVAILABLE] A HostlistDownloader update is available! {latestVer} > {currentVer}", Enums.StatusSeverityType.Notice);
+                    TraceLogger.Log($"Use /update command to update automatically or visit https://github.com/DimonByte/HostlistDownloader to download the latest version.", Enums.StatusSeverityType.Notice);
                     return true;
                 }
                 else

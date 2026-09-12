@@ -31,9 +31,9 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 {
     public static class HostListManager
     {
-        public static bool ProblemDuringUpdate;
-        public static bool HasDownloadedUpdates;
-        public static List<string> UpdateStatistics = []; //Make this a array, this can be overwritten by whitelist and blocklist, so we need to store the statistics for both and then combine them into a single string for the final output.
+        internal static bool ProblemDuringUpdate;
+        internal static bool HasDownloadedUpdates;
+        internal static List<string> UpdateStatistics = [];
         private static bool hasUpdates = false;
 
         public static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
@@ -55,7 +55,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             {
                 TraceLogger.Log("Blocklist is configured. Updating blocklists...");
 
-                // Reconcile sources: detect added/removed URLs individually instead of clearing everything
                 var (addedUrls, removedFileNames) = SourceManager.ReconcileSources(IOManager.BlockListFolderLocation, ConfigManager.Instance.Blocklists);
 
                 if (removedFileNames.Count > 0)
@@ -93,7 +92,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
             if (whiteListIni.Length != 0)
             {
-                // Reconcile sources for whitelist
                 var (wlAdded, wlRemoved) = SourceManager.ReconcileSources(IOManager.WhiteListFolderLocation, ConfigManager.Instance.Whitelist);
 
                 if (wlRemoved.Count > 0)
@@ -136,20 +134,15 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             }
             CommitToMasterLists();
 
-            TraceLogger.Log("Host lists update completed!", Enums.StatusSeverityType.Important);
+            TraceLogger.Log("Host lists update completed!", Enums.StatusSeverityType.Notice);
         }
+
         /// <summary>
         /// Commits the temporary generated hostfile files to the final master version.
         /// This is done to allow a fallback in the event that something goes wrong, so if the generation fails spectacularly, it wont overwrite the existing master lists with a broken version.
         /// </summary>
         private static void CommitToMasterLists()
         {
-            //Move the temp combined lists to their final locations
-            //e.g. HLDcombined-blocklist-TEMP.txt and HLDcombined-whitelist-TEMP.txt will be moved to HLDcombined-blocklist.txt and HLDcombined-whitelist.txt respectively.
-            //This is done to ensure that the combined lists are only updated if the entire process completes successfully. And also to prevent OS file locks from preventing the combined lists from being updated.
-            //This also allows partial completion, since the ones that failed usually have a old version in the hostfiles folder, so the user can still use the old version of the combined lists if something goes wrong.
-            //First get lines of temp and final and print the difference in the logs for debugging purposes.
-
             var tempCombinedList = File.Exists(IOManager.CombinedListFileLocationTemp) ? File.ReadAllLines(IOManager.CombinedListFileLocationTemp).Length : 0;
             var finalCombinedList = File.Exists(IOManager.CombinedListFileLocation) ? File.ReadAllLines(IOManager.CombinedListFileLocation).Length : 0;
             string[] FilesToCreate =
@@ -201,8 +194,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                     File.Create(file).Dispose();
                 }
                 TraceLogger.Log("Temporary combined lists cleared after committing to final locations.", Enums.StatusSeverityType.Debug);
-                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines", Enums.StatusSeverityType.Important);
-                //Save diff to UpdateStatistics.txt
+                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines", Enums.StatusSeverityType.Notice);
                 File.WriteAllLines(IOManager.UpdateStatsLocation, [$"{tempCombinedList - finalCombinedList}"]);
             }
             catch (Exception ex)
@@ -213,9 +205,11 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             }
         }
 
+        /// <summary>
+        /// Replace the Final combined lists with the backup versions if they exist.
+        /// </summary>
         public static void RevertToPreviousVersion()
         {
-            //Replace the Final combined lists with the backup versions if they exist.
             string[] FilesToRevert =
             [
                 IOManager.CombinedBlockListFileLocation,
@@ -235,6 +229,18 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 {
                     if (File.Exists(BackupFiles[i]))
                     {
+                        long size = new FileInfo(BackupFiles[i]).Length;
+                        if (size == 0)
+                        {
+                            TraceLogger.Log($"Backup for {FilesToRevert[i]} is empty. Skipping revert.", Enums.StatusSeverityType.Warning);
+                            continue;
+                        }
+                        string firstLine = File.ReadLines(BackupFiles[i]).First();
+                        if (firstLine.TrimStart().StartsWith("<", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TraceLogger.Log($"Backup for {FilesToRevert[i]} appears to be corrupted (HTML). Skipping revert.", Enums.StatusSeverityType.Error);
+                            continue;
+                        }
                         File.Move(BackupFiles[i], FilesToRevert[i], overwrite: true);
                         TraceLogger.Log($"Reverted {FilesToRevert[i]} to previous version from {BackupFiles[i]}", Enums.StatusSeverityType.Warning);
                     }
@@ -249,10 +255,11 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 TraceLogger.Log($"Failed to revert combined lists to previous versions: {ex}", Enums.StatusSeverityType.Error);
             }
         }
-
+        /// <summary>
+        /// Processes the blocklist and whitelist files in offline mode, merging them into combined lists without downloading from the internet. /merge does this. 
+        /// </summary>
         public static void StartOfflineListProcessing()
         {
-            //Used when the user specifies the /offline command argument.
             string[] blockListIni = [.. ConfigManager.Instance.Blocklists];
             string[] whiteListIni = [.. ConfigManager.Instance.Whitelist];
             string[] userblockListIni = [.. ConfigManager.Instance.UserWebsiteBlocklist];
@@ -304,9 +311,15 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
             GenerateTemporaryCombinedList();
             CommitToMasterLists();
+            TraceLogger.Log("Offline list processing completed!", Enums.StatusSeverityType.Notice);
             Environment.Exit(0);
         }
 
+        /// <summary>
+        /// Merges user-defined domains from the configuration into the combined list, ensuring no duplicates are added. This method reads the existing combined list and appends unique entries from the user-defined list, handling both blocklist and whitelist scenarios.
+        /// </summary>
+        /// <param name="CombinedLocation"></param>
+        /// <param name="isBlocklist"></param>
         private static void MergeUserDefinedDomains(string CombinedLocation, bool isBlocklist)
         {
             TraceLogger.Log($"Attempting to merge user defined website lists for {CombinedLocation}...");
@@ -317,9 +330,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                     : ConfigManager.Instance.UserWebsiteWhitelist;
                 TraceLogger.Log($"User defined list entry count: {userDefinedLines.Count:N0}");
 
-                // Read what's already in the compiled/downloaded combined list so we APPEND unique
-                // entries to it instead of replacing it. Previously this used File.WriteAllLines with
-                // only the user-defined entries, which discarded every downloaded entry on each run.
                 var existingCombinedLines = new HashSet<string>(
                     File.Exists(CombinedLocation) ? File.ReadAllLines(CombinedLocation) : [],
                     StringComparer.OrdinalIgnoreCase);
@@ -331,6 +341,10 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 //Create the ProgressBar
                 using (var pb = new ProgressBar() { Maximum = max })
                 {
+                    if (TraceLogger.QuietMode)
+                    {
+                        pb.Text.Body.SetVisible(false);
+                    }
                     //Clear "Description Text"
                     pb.Text.Description.Clear();
                     string blockorwhite = isBlocklist ? "blocklist" : "whitelist";
@@ -428,16 +442,19 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             // source URL rather than just an internal "3 - hosts.txt" filename.
             var sourceManifest = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
 
-            int max = allUrls.Count;
-
             //Create the ProgressBar
-            using (var pb = new ProgressBar() { Maximum = max })
+            using (var pb = new ProgressBar() { Maximum = null })
             {
+                if (TraceLogger.QuietMode)
+                {
+                    pb.Text.Body.SetVisible(false);
+                }
                 //Clear "Description Text"
                 pb.Text.Description.Clear();
 
                 //Setting "Description Text" when "Processing"
                 pb.Text.Description.Processing.AddNew().SetValue(pb => $"Downloading: {pb.ElementName}");
+                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Total URLs: {allUrls.Count}");
                 pb.Text.Description.Processing.AddNew().SetValue(pb => $"Number of URLs processed: {pb.Value}");
                 pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
                 pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
@@ -445,11 +462,8 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 //Setting "Description Text" when "Done"
                 pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} URLs downloaded in {pb.TimeProcessing.TotalSeconds}s.");
 
-
                 foreach (var url in allUrls)
                 {
-                    Thread.Sleep(1);
-                    pb.PerformStep(url);
                     var threadCount = ++completedCount;
                     if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
                         (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -462,9 +476,16 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                     var fileName = $"{threadCount} - {safeFileName}";
                     var filePath = Path.Combine(ListFolderLocation, fileName);
 
-                    if (!filePath.StartsWith(ListFolderLocation, StringComparison.OrdinalIgnoreCase))
+                    string fullFilePath = Path.GetFullPath(filePath);
+                    string fullBaseDir = Path.GetFullPath(ListFolderLocation) + Path.DirectorySeparatorChar;
+                    if (!fullFilePath.StartsWith(fullBaseDir, StringComparison.OrdinalIgnoreCase))
                     {
                         TraceLogger.Log($"Path traversal attempt blocked: {url}", Enums.StatusSeverityType.Error);
+                        continue;
+                    }
+                    if (safeFileName.Contains(".."))
+                    {
+                        TraceLogger.Log($"Filename contains '..' segment, blocked: {url}", Enums.StatusSeverityType.Error);
                         continue;
                     }
 
@@ -506,7 +527,12 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                                     TraceLogger.Log($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).", Enums.StatusSeverityType.Warning);
                                     break;
                                 case DownloadOutcome.NotStarted:
+                                    ProblemDuringUpdate = true;
                                     TraceLogger.Log($"Download of {url} was not started. This is unexpected and may indicate a bug.", Enums.StatusSeverityType.Error);
+                                    break;
+                                case DownloadOutcome.ContentRejectedNonText:
+                                    ProblemDuringUpdate = true;
+                                    TraceLogger.Log($"Download of {url} was rejected because the content was not a text file. This may indicate a misconfigured source or a change in the source's content type.", Enums.StatusSeverityType.Warning);
                                     break;
                             }
                         }
@@ -530,19 +556,13 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                             }
                         }
                     }));
+                    pb.PerformStep(url);
                 }
-
-                //for (int i = 0; i < max; i++)
-                //{
-                //    string elementName = Guid.NewGuid().ToString();
-
-                //    Task.Delay(10).Wait(); //Do something
-                //    pb.PerformStep(elementName); //Step in ProgressBar. Setting current ElementName
-                //}
+                await Task.WhenAll(tasks);
             }
-            await Task.WhenAll(tasks);
 
             watch.Stop();
+            semaphore.Dispose();
             if (cancellationToken.IsCancellationRequested)
             {
                 TraceLogger.Log("Download cancelled by user before completion.", Enums.StatusSeverityType.Warning);
@@ -575,7 +595,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
             $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
             UpdateStatistics.Add(InternalUpdateStats);
-            TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Important);
+            TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Notice);
 
             if (transientFailures > 0)
             {
@@ -623,35 +643,68 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             await ProcessDownloadLists(iniLocations, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
         }
 
+        /// <summary>
+        /// Used to compile specific lists, e.g. blocklist files or whitelist files, into a single combined list.
+        /// </summary>
+        /// <param name="listFolderLocation"></param>
+        /// <param name="combinedListLocation"></param>
+        /// <param name="urlCount"></param>
+        /// <param name="knownPermanentFailures"></param>
+        /// <param name="startTime"></param>
+        /// <returns></returns>
         public static bool CompileSpecificList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
         {
-            //Used to compile specific lists, e.g. blocklist files or whitelist files, into a single combined list.
             TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
             IOManager.MergeFiles(listFolderLocation, combinedListLocation);
             TransformationEngine.BeginTransformation(combinedListLocation);
             return IntegrityChecker.CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime, ProblemDuringUpdate, HasDownloadedUpdates);
         }
 
-
-        public static void GenerateTemporaryCombinedList()
+        /// <summary>
+        /// Generates a temporary combined list by merging the temporary whitelist and blocklist files, ensuring that any entries in the whitelist are excluded from the final combined list. This method reads the temporary whitelist and blocklist files, filters out any entries from the blocklist that are present in the whitelist (including handling wildcard patterns), and writes the resulting filtered list to a temporary combined list file.
+        /// </summary>
+        private static void GenerateTemporaryCombinedList()
         {
-            //Used to combine the compiled blocklist and whitelist into a single combined list file, which is then used for the final output to the user.
             TraceLogger.Log($"Generating temporary {Path.GetFileName(IOManager.CombinedListFileLocationTemp)} list...");
             try
             {
                 var whiteList = IOManager.ReadLinesFromFileCached(IOManager.CombinedWhiteListFileLocationTemp);
                 var blockListLines = IOManager.ReadLinesFromFile(IOManager.CombinedBlockListFileLocationTemp);
-                var filteredLines = blockListLines.Where(line =>
-                    !whiteList.Any(whiteItem =>
+
+                // Partition whitelist into exact-match set and wildcard patterns
+                var exactWhitelist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var wildcardPatterns = new List<Regex>();
+
+                foreach (var item in whiteList)
+                {
+                    if (string.IsNullOrWhiteSpace(item)) continue;
+                    if (item.Contains('*'))
                     {
-                        if (whiteItem.Contains('*'))
-                        {
-                            string pattern = "^" + Regex.Escape(whiteItem).Replace("\\*", ".") + "$";
-                            return Regex.IsMatch(line, pattern, RegexOptions.IgnoreCase);
-                        }
-                        return line.Equals(whiteItem, StringComparison.OrdinalIgnoreCase);
-                    })
-                ).ToList();
+                        string pattern = "^" + Regex.Escape(item).Replace("\\*", ".*") + "$";
+                        wildcardPatterns.Add(new Regex(pattern, RegexOptions.IgnoreCase));
+                    }
+                    else
+                    {
+                        exactWhitelist.Add(item.Trim());
+                    }
+                }
+
+                var filteredLines = new List<string>(blockListLines.Count());
+                foreach (var line in blockListLines)
+                {
+                    if (exactWhitelist.Contains(line)) continue;
+
+                    bool wildcardMatch = false;
+                    for (int i = 0; i < wildcardPatterns.Count && !wildcardMatch; i++)
+                    {
+                        wildcardMatch = wildcardPatterns[i].IsMatch(line);
+                    }
+                    if (!wildcardMatch)
+                    {
+                        filteredLines.Add(line);
+                    }
+                }
+
                 File.WriteAllLines(IOManager.CombinedListFileLocationTemp, filteredLines);
                 TraceLogger.Log($"Generated combined list to: {IOManager.CombinedListFileLocationTemp} | Line count: {filteredLines.Count:N0}");
             }

@@ -219,14 +219,6 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
         }
 
-        //public static void AddToIniFile(string iniFilePath, string domain)
-        //{
-        //    var directory = Path.GetDirectoryName(iniFilePath);
-        //    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        //        Directory.CreateDirectory(directory);
-        //    File.AppendAllText(iniFilePath, $"{domain}{Environment.NewLine}");
-        //}
-
         public static void MergeFiles(string sourceFolder, string outputFile)
         {
             var files = Directory.GetFiles(sourceFolder, "*.*")
@@ -251,6 +243,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 //Create the ProgressBar
                 using (var pb = new ProgressBar() { Maximum = max })
                 {
+                    if (TraceLogger.QuietMode)
+                    {
+                        pb.Text.Body.SetVisible(false);
+                    }
                     //Clear "Description Text"
                     pb.Text.Description.Clear();
 
@@ -283,7 +279,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
                 writer.Flush();
                 watch.Stop();
-                TraceLogger.Log($"Merge files completed in {watch.Elapsed.TotalSeconds} seconds.", Enums.StatusSeverityType.Important);
+                TraceLogger.Log($"Merge files completed in {watch.Elapsed.TotalSeconds} seconds.", Enums.StatusSeverityType.Information);
             }
             catch (UnauthorizedAccessException ex1)
             {
@@ -413,7 +409,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// </summary>
         public static void RunDuplicateCheck()
         {
-            TraceLogger.Log("Starting Duplicate Analysis...", Enums.StatusSeverityType.Important);
+            TraceLogger.Log("Starting Duplicate Analysis...", Enums.StatusSeverityType.Notice);
             var blockListFolder = IOManager.BlockListFolderLocation;
             var whiteListFolder = IOManager.WhiteListFolderLocation;
             var allLists = new List<(string Name, HashSet<string> Lines)>();
@@ -452,7 +448,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     return;
                 }
 
-                TraceLogger.Log($"Analyzing {allLists.Count} hostlists for duplicates...", Enums.StatusSeverityType.Important);
+                TraceLogger.Log($"Analyzing {allLists.Count} hostlists for duplicates...", Enums.StatusSeverityType.Notice);
                 var results = new List<DuplicateResult>();
                 foreach (var currentList in allLists)
                 {
@@ -500,7 +496,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 if (results.Count == 0)
                 {
-                    TraceLogger.Log("No significant duplicates found.", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log("No significant duplicates found.", Enums.StatusSeverityType.Notice);
                     return;
                 }
 
@@ -510,7 +506,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 foreach (var result in results)
                 {
                     string statusIcon = result.TotalPercentage > 50 ? "!!" : result.TotalPercentage > 10 ? "! " : "  ";
-                    TraceLogger.Log($"[{statusIcon}] {result.TargetName} is {result.TotalPercentage:F1}% duplicated", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"[{statusIcon}] {result.TargetName} is {result.TotalPercentage:F1}% duplicated", Enums.StatusSeverityType.Notice);
 
                     foreach (var (SourceName, Count, Percentage) in result.Overlaps)
                     {
@@ -518,7 +514,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     }
                 }
 
-                TraceLogger.Log("Duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve source information, and /analysedup \"<source_name>\" to analyze duplicates for a specific source.", Enums.StatusSeverityType.Important);
+                TraceLogger.Log("Duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve source information, and /analysedup \"<source_name>\" to analyze duplicates for a specific source.", Enums.StatusSeverityType.Notice);
             }
             catch (Exception ex)
             {
@@ -550,7 +546,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <param name="targetFileName">The filename to analyze for duplicates.</param>
         public static void AnalyseDuplicate(string targetFileName)
         {
-            TraceLogger.Log($"Starting deep duplicate analysis for: {targetFileName}...", Enums.StatusSeverityType.Important);
+            TraceLogger.Log($"Starting deep duplicate analysis for: {targetFileName}...", Enums.StatusSeverityType.Notice);
 
             var blockListFolder = IOManager.BlockListFolderLocation;
             var whiteListFolder = IOManager.WhiteListFolderLocation;
@@ -619,10 +615,10 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
                 if (duplicateMap.Count == 0)
                 {
-                    TraceLogger.Log($"No duplicates found for '{targetFileName}'. It is unique.", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"No duplicates found for '{targetFileName}'. It is unique.", Enums.StatusSeverityType.Notice);
                     return;
                 }
-                TraceLogger.Log($"Found duplicates in {duplicateMap.Count} other hostlists.", Enums.StatusSeverityType.Important);
+                TraceLogger.Log($"Found duplicates in {duplicateMap.Count} other hostlists.", Enums.StatusSeverityType.Notice);
 
                 var sortedSources = duplicateMap.OrderBy(x => x.Value.Count, Comparer<int>.Default).Reverse();
                 foreach (var (sourceName, dupLines) in sortedSources)
@@ -635,7 +631,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     double sourceRedundancyPercentage = (dupCount / (double)sourceLines.Count) * 100;
                     int sourceUniqueEntries = sourceLines.Count - dupCount;
 
-                    TraceLogger.Log($"--- Duplicate Source: {sourceName} ({dupCount} lines, {targetOverlapPercentage:F1}% overlap with Target) ---", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"--- Duplicate Source: {sourceName} ({dupCount} lines, {targetOverlapPercentage:F1}% overlap with Target) ---", Enums.StatusSeverityType.Notice);
 
                     int displayLimit = Math.Min(20, dupLines.Count);
                     for (int i = 0; i < displayLimit; i++)
@@ -651,16 +647,16 @@ namespace HostlistDownloader.Modules.WindowsSystem
                     if (sourceRedundancyPercentage >= 100.0)
                     {
                         TraceLogger.Log($"Redundant: '{sourceName}' is 100% redundant (contains no unique entries).", Enums.StatusSeverityType.Warning);
-                        TraceLogger.Log($"   Consider removing '{sourceName}' as it is fully covered by '{targetFileName}'.", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"   Consider removing '{sourceName}' as it is fully covered by '{targetFileName}'.", Enums.StatusSeverityType.Notice);
                     }
                     else
                     {
                         // Optional: Inform user that while it overlaps, it still has unique content
-                        TraceLogger.Log($"   Note: '{sourceName}' contains {sourceUniqueEntries} unique entries not found in '{targetFileName}'.", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"   Note: '{sourceName}' contains {sourceUniqueEntries} unique entries not found in '{targetFileName}'.", Enums.StatusSeverityType.Notice);
                     }
                 }
 
-                TraceLogger.Log("Deep duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve individual source files.", Enums.StatusSeverityType.Important);
+                TraceLogger.Log("Deep duplicate analysis complete. Use /getsource \"<source_name>\" to retrieve individual source files.", Enums.StatusSeverityType.Notice);
             }
             catch (Exception ex)
             {
@@ -686,14 +682,14 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 //Combined Whitelist: 1,234,567 lines, 12.34 MB, Last Updated: 2024-06-01 12:34:56
                 //Number of Blocklist Sources: 123
                 //Number of Whitelist Sources: 123
-                TraceLogger.Log("[Stats Report]", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Combined List: {File.ReadLines(CombinedListFileLocation).Count():N0} lines, {FormatBytes(combinedListInfo.Length)}, Last Updated: {combinedListInfo.LastWriteTime}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Combined Blocklist: {File.ReadLines(CombinedBlockListFileLocation).Count():N0} lines, {FormatBytes(combinedBlockListInfo.Length)}, Last Updated: {combinedBlockListInfo.LastWriteTime}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Combined Whitelist: {File.ReadLines(CombinedWhiteListFileLocation).Count():N0} lines, {FormatBytes(combinedWhiteListInfo.Length)}, Last Updated: {combinedWhiteListInfo.LastWriteTime}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Number of Blocklist Sources: {ConfigManager.Instance.Blocklists.Count:N0}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Number of Whitelist Sources: {ConfigManager.Instance.Whitelist.Count:N0}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Number of User Blocklist Domains: {ConfigManager.Instance.UserWebsiteBlocklist.Count:N0}", Enums.StatusSeverityType.Important);
-                TraceLogger.Log($"Number of User Whitelist Domains: {ConfigManager.Instance.UserWebsiteWhitelist.Count:N0}", Enums.StatusSeverityType.Important);
+                TraceLogger.Log("[Stats Report]", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Combined List: {File.ReadLines(CombinedListFileLocation).Count():N0} lines, {FormatBytes(combinedListInfo.Length)}, Last Updated: {combinedListInfo.LastWriteTime}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Combined Blocklist: {File.ReadLines(CombinedBlockListFileLocation).Count():N0} lines, {FormatBytes(combinedBlockListInfo.Length)}, Last Updated: {combinedBlockListInfo.LastWriteTime}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Combined Whitelist: {File.ReadLines(CombinedWhiteListFileLocation).Count():N0} lines, {FormatBytes(combinedWhiteListInfo.Length)}, Last Updated: {combinedWhiteListInfo.LastWriteTime}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Number of Blocklist Sources: {ConfigManager.Instance.Blocklists.Count:N0}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Number of Whitelist Sources: {ConfigManager.Instance.Whitelist.Count:N0}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Number of User Blocklist Domains: {ConfigManager.Instance.UserWebsiteBlocklist.Count:N0}", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Number of User Whitelist Domains: {ConfigManager.Instance.UserWebsiteWhitelist.Count:N0}", Enums.StatusSeverityType.Notice);
                 TraceLogger.Log("[Stats Report Complete]");
             }
             catch (Exception ex)

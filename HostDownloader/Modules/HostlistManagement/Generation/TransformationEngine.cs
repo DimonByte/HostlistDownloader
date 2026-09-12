@@ -79,6 +79,10 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             //Create the ProgressBar
             using (var pb = new ProgressBar() { Maximum = max })
             {
+                if (TraceLogger.QuietMode)
+                {
+                    pb.Text.Body.SetVisible(false);
+                }
                 //Clear "Description Text"
                 pb.Text.Description.Clear();
 
@@ -241,7 +245,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             {
                 TraceLogger.Log($"Formatting Complete. Saving {formattedLines.Count:N0} lines to {combinedFileLocation}");
                 File.WriteAllLines(combinedFileLocation, formattedLines);
-                TraceLogger.Log($"Saved {formattedLines.Count:N0} lines to {combinedFileLocation}", Enums.StatusSeverityType.Important);
+                TraceLogger.Log($"Saved {formattedLines.Count:N0} lines to {combinedFileLocation}", Enums.StatusSeverityType.Notice);
                 if (wildcardPreserved > 0)
                     TraceLogger.Log($"Preserved {wildcardPreserved:N0} wildcard (*.) entries for {formatType} format.");
                 if (wildcardRemoved > 0)
@@ -279,6 +283,10 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 //Create the ProgressBar
                 using (var pb = new ProgressBar() { Maximum = max })
                 {
+                    if (TraceLogger.QuietMode)
+                    {
+                        pb.Text.Body.SetVisible(false);
+                    }
                     //Clear "Description Text"
                     pb.Text.Description.Clear();
 
@@ -315,7 +323,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 try
                 {
                     File.WriteAllLines(MergedFileLoc, cleanedLines);
-                    TraceLogger.Log($"Removed duplicates and empty lines. Saved {cleanedLines.Count:N0} unique lines to {MergedFileLoc}", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"Removed duplicates and empty lines. Saved {cleanedLines.Count:N0} unique lines to {MergedFileLoc}", Enums.StatusSeverityType.Notice);
                 }
                 catch (Exception ex)
                 {
@@ -340,10 +348,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                     TraceLogger.Log($"  Empty/whitespace lines removed: {emptyRemoved:N0}");
                 TraceLogger.Log($"Lines before: {originalCount:N0} → after: {cleanedLines.Count:N0}");
             }
-            //catch (FileNotFoundException ex1)
-            //{
-            //    TraceLogger.Log($"{ex1.Message}. You can IGNORE this error if the file not found is for a list that you haven't configured. (e.g. if you left whitelist.ini blank and the file not found is the HLDcombined-whitelist.txt, you can ignore.).", Enums.StatusSeverityType.Error);
-            //}
             catch (Exception ex)
             {
                 TraceLogger.Log($"Error removing duplicates from {MergedFileLoc}: {ex}", Enums.StatusSeverityType.Error);

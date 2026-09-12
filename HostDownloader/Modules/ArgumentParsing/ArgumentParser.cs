@@ -66,6 +66,7 @@ USER-DEFINED RULES:
   /adduserwhitelist <domain>, /auw  Add a custom domain allow rule.
   /removeuserwhitelist <domain>, /ruw  Remove a custom domain allow rule.";
 
+        private const int MaxArgumentLength = 4096;
         /// <summary>
         /// Parses the command-line arguments.
         /// </summary>
@@ -73,6 +74,9 @@ USER-DEFINED RULES:
         /// <returns>An ArgumentResult containing parsed flags and values.</returns>
         public static ArgumentResult Parse(string[] args)
         {
+            //Internal flags
+            bool anyMatched = false;
+            //Local Arugment Flags. From ArgumentResults.cs
             bool isQuiet = false;
             bool isFresh = false;
             string? searchDomain = null;
@@ -95,7 +99,6 @@ USER-DEFINED RULES:
             bool diffMode = false;
             bool revertLists = false;
             bool statsReport = false;
-
             List<string> remainingArgs = [];
 
             TraceLogger.Log("Starting argument parsing...", Enums.StatusSeverityType.Debug);
@@ -106,27 +109,35 @@ USER-DEFINED RULES:
 
                 // Helper to check if next arg is valid value (not a flag)
                 bool HasNextArg() => i + 1 < args.Length && !args[i + 1].StartsWith('/');
-                string GetNextArg() => HasNextArg() ? args[i + 1] : throw new ArgumentException($"Missing argument for {arg}");
+                string GetNextArg() => HasNextArg()
+                    ? (args[i + 1].Length > MaxArgumentLength
+                        ? throw new ArgumentException($"Argument value for {arg} exceeds maximum length of {MaxArgumentLength}.")
+                        : args[i + 1])
+                    : throw new ArgumentException($"Missing argument for {arg}");
 
                 TraceLogger.Log($"Processing argument: {arg}", Enums.StatusSeverityType.Debug);
 
                 if (arg.Equals("/stats", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     statsReport = true;
                 }
 
                 if (arg.Equals("/diff", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     diffMode = true;
                 }
 
                 if (arg.Equals("/revert", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     revertLists = true;
                 }
 
                 if (arg.Equals("/update", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     updateCheck = true;
                 }
 
@@ -134,12 +145,14 @@ USER-DEFINED RULES:
                     arg.Equals("/regenerate", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/re", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     mergeMode = true;
                 }
 
                 if (arg.Equals("/analysedup", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/dupanalyse", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     analyseDuplicateSource = GetNextArg();
                     i++;
                 }
@@ -147,18 +160,21 @@ USER-DEFINED RULES:
                 if (arg.Equals("/getsource", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/gs", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     getSourceName = GetNextArg();
                     i++;
                 }
 
-                if (arg.Equals("/duplicate", StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/dup", StringComparison.OrdinalIgnoreCase))
+                if (arg.Equals("/duplicatescan", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("/dupscan", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     checkDuplicates = true;
                 }
 
                 if (arg.Equals("/debug", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     debugMode = true;
                 }
 
@@ -166,18 +182,21 @@ USER-DEFINED RULES:
                 if (arg.Equals("/quiet", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/q", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     isQuiet = true;
                 }
                 // Handle /fresh or /fr
                 if (arg.Equals("/fresh", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/fr", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     isFresh = true;
                 }
                 // Handle /search or /s
                 if (arg.Equals("/search", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/s", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     searchDomain = GetNextArg();
                     i++;
                 }
@@ -185,6 +204,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/purge", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/p", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     shouldPurgeLogs = true;
                 }
                 // Handle /help variants
@@ -192,6 +212,7 @@ USER-DEFINED RULES:
                          arg.Equals("/h", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/?", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     showHelp = true;
                 }
 
@@ -199,6 +220,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/addblocklist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/ab", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     addBlocklistUrl = GetNextArg();
                     i++;
                 }
@@ -206,6 +228,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/removeblocklist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rb", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     removeBlocklistUrl = GetNextArg();
                     i++;
                 }
@@ -213,6 +236,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/addwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/aw", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     addWhitelistUrl = GetNextArg();
                     i++;
                 }
@@ -220,6 +244,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/removewhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rw", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     removeWhitelistUrl = GetNextArg();
                     i++;
                 }
@@ -227,6 +252,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/adduserblock", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/aub", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     addUserBlockDomain = GetNextArg();
                     i++;
                 }
@@ -234,6 +260,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/removeuserblock", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/rub", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     removeUserBlockDomain = GetNextArg();
                     i++;
                 }
@@ -241,6 +268,7 @@ USER-DEFINED RULES:
                 if (arg.Equals("/adduserwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/auw", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     addUserAllowDomain = GetNextArg();
                     i++;
                 }
@@ -248,11 +276,11 @@ USER-DEFINED RULES:
                 if (arg.Equals("/removeuserwhitelist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/ruw", StringComparison.OrdinalIgnoreCase))
                 {
+                    anyMatched = true;
                     removeUserAllowDomain = GetNextArg();
                     i++;
                 }
-
-                else
+                if (!anyMatched)
                 {
                     remainingArgs.Add(arg);
                 }
@@ -337,12 +365,12 @@ USER-DEFINED RULES:
                     //Check if diffResult is a number only
                     else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
                     {
-                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"Last run diff analysis results: {diffCount} differences found.", Enums.StatusSeverityType.Notice);
                     }
                     else
                     {
                         TraceLogger.Log("Warning: TryParse failed for diff analysis results or returned a non-numeric value. Printing raw results.", Enums.StatusSeverityType.Debug);
-                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Important);
+                        TraceLogger.Log("Last run diff analysis results: " + string.Join(Environment.NewLine, diffResult), Enums.StatusSeverityType.Notice);
                     }
                 }
                 catch (Exception ex)
@@ -417,7 +445,7 @@ USER-DEFINED RULES:
                 try
                 {
                     IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
-                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Important);
+                    TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Notice);
                 }
                 catch (Exception ex)
                 {
@@ -429,6 +457,14 @@ USER-DEFINED RULES:
             if (result.GetSourceName != null)
             {
                 TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
+                if (result.GetSourceName.Contains("..") ||
+                    result.GetSourceName.Contains(Path.DirectorySeparatorChar) ||
+                    result.GetSourceName.Contains(Path.AltDirectorySeparatorChar) ||
+                    Path.IsPathRooted(result.GetSourceName))
+                {
+                    TraceLogger.Log($"Invalid source name containing path separators or traversal: '{result.GetSourceName}'", Enums.StatusSeverityType.Warning);
+                    Environment.Exit(1);
+                }
                 try
                 {
                     //Check if it exists in blocklist or whitelist folders
@@ -440,17 +476,17 @@ USER-DEFINED RULES:
                     }
                     else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Notice);
                         string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Notice);
                     }
                     else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Notice);
                         string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
-                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Important);
+                        TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Notice);
                     }
                 }
                 catch (Exception ex)
@@ -549,7 +585,7 @@ USER-DEFINED RULES:
                     config.SaveToDisk(settingsPath);
                     TraceLogger.Log("Configuration saved to disk.");
                 }
-                TraceLogger.Log("Configuration update completed successfully.", Enums.StatusSeverityType.Important);
+                TraceLogger.Log("Configuration update completed successfully.", Enums.StatusSeverityType.Notice);
             }
             catch (Exception ex)
             {

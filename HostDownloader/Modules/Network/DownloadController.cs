@@ -25,6 +25,7 @@ using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.WindowsSystem;
 using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Text;
 
 namespace HostlistDownloader.Modules.Network
 {
@@ -41,7 +42,8 @@ namespace HostlistDownloader.Modules.Network
         PermanentFailure,
         Cancelled,
         DownloadBlockedByConfig,
-        NotStarted
+        NotStarted,
+        ContentRejectedNonText
     }
 
     internal class DownloadController
@@ -51,55 +53,103 @@ namespace HostlistDownloader.Modules.Network
         private const int MaxRetries = 3;
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
 
+        private const int ContentValidationBufferSize = 4096;
+
+        private static readonly string[] HtmlSignatures =
+        [
+            "<html",
+            "<!doctype html",
+            "<head>",
+            "<body>",
+            "<!doctype",
+            "<!document",
+            "<!--"
+        ];
+
+        private static readonly string[] AllowedContentTypePrefixes =
+        [
+            "text/plain",
+            "text/comma-separated-values",
+            "application/octet-stream",
+            "text/csv"
+        ];
+
         static DownloadController()
         {
-            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
+            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
             httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("HostlistDownloader", "1.0"));
             httpClient.DefaultRequestHeaders.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip"));
             httpClient.Timeout = DefaultTimeout;
         }
 
-        public static async Task<DownloadOutcome> DownloadFileAsync(string url, string localPath, bool forceMode, int fileID, CancellationToken cancellationToken = default)
+        public static async Task<DownloadOutcome> DownloadFileAsync(
+            string url,
+            string localPath,
+            bool forceMode,
+            int fileID,
+            CancellationToken cancellationToken = default)
         {
-            string WorkingOnName = Path.GetFileName(url);
-            TraceLogger.Log($"{fileID} - {WorkingOnName} | Checking {url}...", Enums.StatusSeverityType.Debug);
+            string workingOnName = SafeGetFileName(url, localPath);
+
             if (string.IsNullOrWhiteSpace(url))
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | URL is null or empty", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | URL is null or empty", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | Invalid URL scheme or format: {url}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | Invalid URL scheme or format: {url}", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
-            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+
+            if (uri.Scheme == Uri.UriSchemeHttp && !ConfigManager.Instance.AllowInsecureSources)
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | URL must start with http:// or https://: {url}", Enums.StatusSeverityType.Error);
-                return DownloadOutcome.PermanentFailure;
-            }
-            //If url is http but configmanager's AllowInsecureSources is false, return permanent failure.
-            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !ConfigManager.Instance.AllowInsecureSources)
-            {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | Insecure HTTP sources has been blocked by configuration, please enable AllowInsecureSources to download from HTTP: {url}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log(
+                    $"{fileID} - {workingOnName} | Insecure HTTP source blocked by configuration. " +
+                    $"Enable AllowInsecureSources to download from HTTP: {url}",
+                    Enums.StatusSeverityType.Error);
                 return DownloadOutcome.DownloadBlockedByConfig;
             }
+
+
             if (string.IsNullOrWhiteSpace(localPath))
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | Local path is null or empty", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | Local path is null or empty", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
+
             string normalizedLocalPath = Path.GetFullPath(localPath);
+
+            string allowedRoot = Path.GetFullPath(IOManager.HostfilesLocation);
+            if (!normalizedLocalPath.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                TraceLogger.Log(
+                    $"{fileID} - {workingOnName} | Local path resolves outside the allowed download directory " +
+                    $"({allowedRoot}): {normalizedLocalPath}",
+                    Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+
+            workingOnName = SafeGetFileName(url, normalizedLocalPath);
+
+            if (IsSystemFile(normalizedLocalPath))
+            {
+                TraceLogger.Log($"{fileID} - {workingOnName} | Target path is a known system file. Aborting.", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
             if (normalizedLocalPath.Contains(".."))
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | Path traversal detected in local path: {localPath}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | Path traversal detected in local path: {localPath}", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
-            WorkingOnName = Path.GetFileName(normalizedLocalPath);
-            string metadataPath1 = normalizedLocalPath + ".etag";
-            if (File.Exists(metadataPath1))
+            string etagPath = normalizedLocalPath + ".etag";
+
+            if (File.Exists(etagPath))
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag exists, checking online version...", Enums.StatusSeverityType.Debug);
+                TraceLogger.Log($"{fileID} - {workingOnName} | ETag metadata exists, checking online version...", Enums.StatusSeverityType.Debug);
                 try
                 {
                     using var headRequest = new HttpRequestMessage(HttpMethod.Head, url);
@@ -107,169 +157,342 @@ namespace HostlistDownloader.Modules.Network
 
                     if (headResponse.IsSuccessStatusCode)
                     {
-                        string? eTag = headResponse.Headers.ETag?.Tag;
-                        string? storedETag = await File.ReadAllTextAsync(metadataPath1, cancellationToken).ConfigureAwait(false);
+                        string? remoteETag = headResponse.Headers.ETag?.Tag;
+                        string storedETag = await File.ReadAllTextAsync(etagPath, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
 
-                        if (!string.IsNullOrEmpty(eTag) && !string.IsNullOrEmpty(storedETag) && eTag == storedETag && !forceMode)
+                        if (!string.IsNullOrEmpty(remoteETag)
+                            && !string.IsNullOrEmpty(storedETag)
+                            && remoteETag == storedETag
+                            && !forceMode)
                         {
-                            if (!File.Exists(normalizedLocalPath)) //Check if host file doesn't exist, but etag does.
+                            if (!File.Exists(normalizedLocalPath))
                             {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag exists but the host file is missing. proceeding with download.");
+                                // ETag is present but the actual host file was deleted.
+                                TraceLogger.Log($"{fileID} - {workingOnName} | ETag exists but host file is missing. Proceeding with download.", Enums.StatusSeverityType.Warning);
                             }
                             else
                             {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag matches - file is already up to date. Skipping download.", Enums.StatusSeverityType.Debug);
+                                TraceLogger.Log($"{fileID} - {workingOnName} | ETag matches – file is up to date. Skipping download.", Enums.StatusSeverityType.Debug);
                                 return DownloadOutcome.SkippedUpToDate;
                             }
                         }
                         else
                         {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag differs or missing, will proceed with download.", Enums.StatusSeverityType.Debug);
+                            TraceLogger.Log($"{fileID} - {workingOnName} | ETag differs or is missing remotely. Proceeding with download.", Enums.StatusSeverityType.Debug);
                         }
                     }
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    TraceLogger.Log($"{fileID} - {workingOnName} | ETag check cancelled by user", Enums.StatusSeverityType.Warning);
+                    return DownloadOutcome.Cancelled;
+                }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Error checking online ETag, will proceed with download: {ex.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Error checking online ETag, proceeding with download: {ex.Message}", Enums.StatusSeverityType.Warning);
                 }
             }
             else
             {
-                TraceLogger.Log($"{fileID} - {WorkingOnName} | No ETag found, will proceed with download.", Enums.StatusSeverityType.Debug);
+                TraceLogger.Log($"{fileID} - {workingOnName} | No ETag metadata found. Proceeding with download.", Enums.StatusSeverityType.Debug);
             }
 
             for (int attempt = 1; attempt <= MaxRetries; attempt++)
             {
                 try
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Downloading to {normalizedLocalPath} (Attempt {attempt}/{MaxRetries})...", Enums.StatusSeverityType.Debug);
+                    TraceLogger.Log(
+                        $"{fileID} - {workingOnName} | Downloading to {normalizedLocalPath} (attempt {attempt}/{MaxRetries})...",
+                        Enums.StatusSeverityType.Debug);
+
                     string? directory = Path.GetDirectoryName(normalizedLocalPath);
                     if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     {
                         Directory.CreateDirectory(directory);
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Directory created: {directory}", Enums.StatusSeverityType.Debug);
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Created directory: {directory}", Enums.StatusSeverityType.Debug);
                     }
 
-                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    cts.CancelAfter(TimeSpan.FromMinutes(5));
-                    using HttpResponseMessage response = await httpClient.GetAsync(url, cts.Token).ConfigureAwait(false);
-
-                    if (response.IsSuccessStatusCode)
+                    // Reject reparse points / symlinks before opening the file.
+                    if (File.Exists(normalizedLocalPath))
                     {
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | HTTP response received with status code: {response.StatusCode}", Enums.StatusSeverityType.Debug);
-                        long? contentLength = response.Content.Headers.ContentLength;
-                        byte[] contentBytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
-                        bool isGzipped = response.Content.Headers.ContentEncoding?.Any(e => e.Contains("gzip")) ?? false;
-                        if (File.Exists(normalizedLocalPath) && !File.GetAttributes(normalizedLocalPath).HasFlag(FileAttributes.Directory))
+                        FileAttributes attrs = File.GetAttributes(normalizedLocalPath);
+                        if (attrs.HasFlag(FileAttributes.ReparsePoint))
                         {
-                            if (File.GetAttributes(normalizedLocalPath).HasFlag(FileAttributes.ReparsePoint))
-                            {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Target path is a symbolic link or reparse point. Aborting.", Enums.StatusSeverityType.Error);
-                                return DownloadOutcome.PermanentFailure;
-                            }
+                            TraceLogger.Log($"{fileID} - {workingOnName} | Target path is a symbolic link or reparse point. Aborting.", Enums.StatusSeverityType.Error);
+                            return DownloadOutcome.PermanentFailure;
                         }
-                        using var fileStream = new FileStream(normalizedLocalPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
-                        if (isGzipped)
+                        if (attrs.HasFlag(FileAttributes.Directory))
                         {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressing GZip...", Enums.StatusSeverityType.Debug);
-                            using var compressedStream = new MemoryStream(contentBytes);
-                            using var decompressedStream = new GZipStream(compressedStream, CompressionMode.Decompress);
-                            if (contentLength.HasValue)
-                            {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressing {contentLength.Value} bytes of GZip data...", Enums.StatusSeverityType.Debug);
-                            }
-                            //Check if decompressedSize is too large. Crash if it is. This is a safety check to prevent decompression bombs.
-                            if (decompressedStream.CanSeek && decompressedStream.Length > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
-                            {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Decompressed size exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent decompression bombs.", Enums.StatusSeverityType.Error);
-                                return DownloadOutcome.DownloadBlockedByConfig;
-                            }
-                            await decompressedStream.CopyToAsync(fileStream, cts.Token).ConfigureAwait(false);
+                            TraceLogger.Log($"{fileID} - {workingOnName} | Target path is a directory. Aborting.", Enums.StatusSeverityType.Error);
+                            return DownloadOutcome.PermanentFailure;
                         }
-                        else
-                        {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | Content is not gzipped, writing directly to file...", Enums.StatusSeverityType.Debug);
-                            //Check if contentLength is too large. Crash if it is. This is a safety check to prevent writing huge files.
-                            if (contentLength.HasValue && contentLength.Value > ConfigManager.Instance.MaxListSizeInMB * 1024 * 1024)
-                            {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Content length exceeds limit of {ConfigManager.Instance.MaxListSizeInMB} MB. Aborting download to prevent writing huge files.", Enums.StatusSeverityType.Error);
-                                return DownloadOutcome.DownloadBlockedByConfig;
-                            }
-                            if (contentLength.HasValue)
-                            {
-                                TraceLogger.Log($"{fileID} - {WorkingOnName} | Writing {contentLength.Value:N0} bytes to file...", Enums.StatusSeverityType.Debug);
-                            }
-
-                            await fileStream.WriteAsync(contentBytes.AsMemory(0, contentBytes.Length), cts.Token).ConfigureAwait(false);
-                        }
-                        if (response.Headers.ETag != null && !string.IsNullOrEmpty(response.Headers.ETag.Tag))
-                        {
-                            string metadataPath = normalizedLocalPath + ".etag";
-                            await File.WriteAllTextAsync(metadataPath, response.Headers.ETag.Tag, cancellationToken).ConfigureAwait(false);
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | ETag stored with file: {response.Headers.ETag.Tag}", Enums.StatusSeverityType.Debug);
-                        }
-                        else
-                        {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | No ETag received from server, skipping ETag storage. This will cause HostListDownloader to re-download this file every sync.", Enums.StatusSeverityType.Warning);
-                        }
-                        HostListManager.HasDownloadedUpdates = true;
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Download completed successfully.");
-                        return DownloadOutcome.Success;
                     }
-                    else
+
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    linkedCts.CancelAfter(TimeSpan.FromMinutes(5));
+
+                    using HttpResponseMessage response = await httpClient.GetAsync(url, linkedCts.Token).ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | Download failed with status code: {response.StatusCode} (File not found, not retrying)", Enums.StatusSeverityType.Error);
+                            TraceLogger.Log($"{fileID} - {workingOnName} | 404 Not Found – permanent failure, not retrying.", Enums.StatusSeverityType.Error);
                             return DownloadOutcome.PermanentFailure;
                         }
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Download attempt {attempt} failed with status code: {response.StatusCode}", Enums.StatusSeverityType.Warning);
-                        if (attempt < MaxRetries)
+
+                        // 401/403/405 are also unlikely to succeed on retry.
+                        if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized
+                            or System.Net.HttpStatusCode.Forbidden
+                            or System.Net.HttpStatusCode.MethodNotAllowed)
                         {
-                            TraceLogger.Log($"{fileID} - {WorkingOnName} | Waiting {RetryDelay.TotalSeconds} seconds before retry...");
-                            await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                            TraceLogger.Log($"{fileID} - {workingOnName} | {response.StatusCode} – server rejected request, not retrying.", Enums.StatusSeverityType.Error);
+                            return DownloadOutcome.PermanentFailure;
                         }
+
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Attempt {attempt} failed with status {response.StatusCode}", Enums.StatusSeverityType.Warning);
+
+                        if (attempt < MaxRetries)
+                            await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                        continue;
                     }
+
+                    string? contentType = response.Content.Headers.ContentType?.MediaType;
+                    if (!string.IsNullOrEmpty(contentType) && !IsAllowedContentType(contentType))
+                    {
+                        TraceLogger.Log(
+                            $"{fileID} - {workingOnName} | Server returned disallowed Content-Type '{contentType}'. " +
+                            $"Expected text/plain, text/csv, or application/octet-stream.",
+                            Enums.StatusSeverityType.Error);
+                        return DownloadOutcome.ContentRejectedNonText;
+                    }
+
+                    long maxBytes = ConfigManager.Instance.MaxListSizeInMB * 1024L * 1024L;
+                    long? declaredLength = response.Content.Headers.ContentLength;
+
+                    if (declaredLength.HasValue && declaredLength.Value > maxBytes)
+                    {
+                        TraceLogger.Log(
+                            $"{fileID} - {workingOnName} | Declared content length {declaredLength.Value:N0} bytes exceeds " +
+                            $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting.",
+                            Enums.StatusSeverityType.Error);
+                        return DownloadOutcome.DownloadBlockedByConfig;
+                    }
+
+                    byte[] contentBytes = await response.Content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
+
+                    if (contentBytes.Length > maxBytes)
+                    {
+                        TraceLogger.Log(
+                            $"{fileID} - {workingOnName} | Actual content size {contentBytes.Length:N0} bytes exceeds " +
+                            $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting.",
+                            Enums.StatusSeverityType.Error);
+                        return DownloadOutcome.DownloadBlockedByConfig;
+                    }
+
+                    if (contentBytes.Length == 0)
+                    {
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Server returned an empty body. Skipping write.", Enums.StatusSeverityType.Warning);
+                        return DownloadOutcome.PermanentFailure;
+                    }
+
+                    bool isGzipped = response.Content.Headers.ContentEncoding
+                        ?.Any(e => string.Equals(e, "gzip", StringComparison.OrdinalIgnoreCase)) ?? false;
+
+                    byte[] finalContent;
+
+                    if (isGzipped)
+                    {
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Decompressing GZip payload...", Enums.StatusSeverityType.Debug);
+                        using var compressedStream = new MemoryStream(contentBytes, writable: false);
+                        using var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress);
+                        using var decompressedBuffer = new MemoryStream();
+                        await gzipStream.CopyToAsync(decompressedBuffer, linkedCts.Token).ConfigureAwait(false);
+
+                        if (decompressedBuffer.Length > maxBytes)
+                        {
+                            TraceLogger.Log(
+                                $"{fileID} - {workingOnName} | Decompressed size {decompressedBuffer.Length:N0} bytes exceeds " +
+                                $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting to prevent decompression bomb.",
+                                Enums.StatusSeverityType.Error);
+                            return DownloadOutcome.DownloadBlockedByConfig;
+                        }
+
+                        finalContent = decompressedBuffer.ToArray();
+                    }
+                    else
+                    {
+                        finalContent = contentBytes;
+                    }
+
+                    if (!IsPlainTextContent(finalContent))
+                    {
+                        TraceLogger.Log(
+                            $"{fileID} - {workingOnName} | Downloaded content appears to be HTML or non-text data, " +
+                            $"not a valid host list. Rejecting.",
+                            Enums.StatusSeverityType.Error);
+                        return DownloadOutcome.ContentRejectedNonText;
+                    }
+
+                    using var fileStream = new FileStream(
+                        normalizedLocalPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None,
+                        4096,
+                        FileOptions.Asynchronous);
+
+                    await fileStream.WriteAsync(finalContent.AsMemory(), linkedCts.Token).ConfigureAwait(false);
+                    await fileStream.FlushAsync(linkedCts.Token).ConfigureAwait(false);
+
+                    string? newETag = response.Headers.ETag?.Tag;
+                    if (!string.IsNullOrEmpty(newETag))
+                    {
+                        await File.WriteAllTextAsync(etagPath, newETag, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Stored ETag: {newETag}", Enums.StatusSeverityType.Debug);
+                    }
+                    else
+                    {
+                        TraceLogger.Log(
+                            $"{fileID} - {workingOnName} | No ETag received from server. " +
+                            $"This file will be re-downloaded on every sync.",
+                            Enums.StatusSeverityType.Warning);
+                    }
+
+                    HostListManager.HasDownloadedUpdates = true;
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Download completed successfully ({finalContent.Length:N0} bytes).");
+                    return DownloadOutcome.Success;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Download was cancelled by user", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Download cancelled by user", Enums.StatusSeverityType.Warning);
                     return DownloadOutcome.Cancelled;
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Download timed out on attempt {attempt}", Enums.StatusSeverityType.Error);
+                    // Timeout on the per-attempt linked CTS.
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Attempt {attempt} timed out", Enums.StatusSeverityType.Error);
                     if (attempt < MaxRetries)
-                    {
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Waiting {RetryDelay.TotalSeconds} seconds before retry...");
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-                    }
                 }
-                catch (HttpRequestException hre) when (attempt < MaxRetries)
+                catch (HttpRequestException hre)
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Network error on attempt {attempt}: {hre.Message}", Enums.StatusSeverityType.Warning);
-
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Network error on attempt {attempt}: {hre.Message}", Enums.StatusSeverityType.Warning);
                     if (attempt < MaxRetries)
-                    {
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Waiting {RetryDelay.TotalSeconds} seconds before retry...");
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-                    }
+                }
+                catch (IOException ioe)
+                {
+                    TraceLogger.Log($"{fileID} - {workingOnName} | I/O error on attempt {attempt}: {ioe.Message}", Enums.StatusSeverityType.Error);
+                    if (attempt < MaxRetries)
+                        await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Error downloading file on attempt {attempt}: {ex.Message}", Enums.StatusSeverityType.Error);
-                    TraceLogger.Log($"{fileID} - {WorkingOnName} | Exception details: {ex}", Enums.StatusSeverityType.Error);
-
-                    // If this isn't the last attempt, wait before retrying
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Unexpected error on attempt {attempt}: {ex.Message}", Enums.StatusSeverityType.Error);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Stack: {ex.StackTrace}", Enums.StatusSeverityType.Debug);
                     if (attempt < MaxRetries)
-                    {
-                        TraceLogger.Log($"{fileID} - {WorkingOnName} | Waiting {RetryDelay.TotalSeconds} seconds before retry...");
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-                    }
                 }
             }
-            TraceLogger.Log($"{fileID} - {WorkingOnName} | Download failed after {MaxRetries} attempts", Enums.StatusSeverityType.Error);
+
+            TraceLogger.Log($"{fileID} - {workingOnName} | Download failed after {MaxRetries} attempts", Enums.StatusSeverityType.Error);
             return DownloadOutcome.TransientFailure;
+        }
+
+        /// <summary>
+        /// Inspects the leading bytes of the content to determine whether it looks like a plain-text
+        /// host list or an HTML / non-text document.
+        /// </summary>
+        private static bool IsPlainTextContent(byte[] content)
+        {
+            int inspectLength = Math.Min(content.Length, ContentValidationBufferSize);
+            string prefix = Encoding.UTF8.GetString(content, 0, inspectLength);
+            string upperPrefix = prefix.ToUpperInvariant();
+            int trimmedStart = 0;
+            while (trimmedStart < Math.Min(upperPrefix.Length, 64)
+                   && char.IsWhiteSpace(upperPrefix[trimmedStart]) || upperPrefix[trimmedStart] == '\uFEFF')
+            {
+                trimmedStart++;
+            }
+
+            string effectivePrefix = upperPrefix[trimmedStart..];
+
+            foreach (string signature in HtmlSignatures)
+            {
+                if (effectivePrefix.StartsWith(signature, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            if (effectivePrefix.StartsWith("<?XML", StringComparison.OrdinalIgnoreCase)
+                && effectivePrefix.Contains("<HTML", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            int controlChars = 0;
+            for (int i = 0; i < inspectLength; i++)
+            {
+                byte b = content[i];
+                if (b < 32 && b is not 9 and not 10 and not 13) // \t, \n, \r
+                {
+                    controlChars++;
+                }
+            }
+
+            if (controlChars > inspectLength / 10)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if the HTTP Content-Type header matches one of the allowed types for a host list.
+        /// </summary>
+        private static bool IsAllowedContentType(string mediaType)
+        {
+            string normalized = mediaType.Trim().ToLowerInvariant();
+            foreach (string prefix in AllowedContentTypePrefixes)
+            {
+                if (normalized == prefix || normalized.StartsWith(prefix + ";", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool IsSystemFile(string path)
+        {
+            string lower = path.ToLowerInvariant();
+            if (lower.Contains(@"\windows\system32\")
+                || lower.Contains(@"\windows\winnt")
+                || lower.Contains(@"\windows\servicing"))
+            {
+                return true;
+            }
+            string fileName = Path.GetFileName(lower);
+            return fileName is "hosts" or "hosts.bak" or "boot.ini" or "autoexec.bat"
+                   or "registry" or "system.dat" or "pagefile.sys" or "swapfile.sys";
+        }
+
+        private static string SafeGetFileName(string url, string fallbackPath)
+        {
+            try
+            {
+                string name = Path.GetFileName(new Uri(url).LocalPath);
+                if (!string.IsNullOrEmpty(name))
+                    return name;
+            }
+            catch
+            {
+                TraceLogger.Log($"Failed to extract file name from URL: {url}. Using fallback path.", Enums.StatusSeverityType.Warning);
+            }
+            return Path.GetFileName(fallbackPath);
         }
     }
 }

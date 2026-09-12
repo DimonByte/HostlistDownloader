@@ -78,7 +78,7 @@ if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates
 {
     Console.ForegroundColor = ConsoleColor.Green;
     ListUpdateStats();
-    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.", Enums.StatusSeverityType.Important);
+    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.", Enums.StatusSeverityType.Notice);
 }
 else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
 {
@@ -91,7 +91,7 @@ else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedU
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
     ListUpdateStats();
-    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (Time taken: {watch.Elapsed.TotalSeconds} seconds.)", Enums.StatusSeverityType.Important);
+    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date! (Time taken: {watch.Elapsed.TotalSeconds} seconds.)", Enums.StatusSeverityType.Notice);
 }
 else // Problem and no downloads
 {
@@ -108,10 +108,10 @@ UpdateChecker.IsUpdateAvailable();
 
 static void ListUpdateStats()
 {
-    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}", Enums.StatusSeverityType.Important);
+    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}", Enums.StatusSeverityType.Notice);
     foreach (var stat in HostListManager.UpdateStatistics)
     {
-        TraceLogger.Log($"[STATS] {stat}", Enums.StatusSeverityType.Important);
+        TraceLogger.Log($"[STATS] {stat}", Enums.StatusSeverityType.Notice);
     }
 }
 TraceLogger.Log($"[END OF LOG]");
