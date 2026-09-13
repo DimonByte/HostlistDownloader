@@ -24,7 +24,7 @@ using HostlistDownloader.Modules.Helpers;
 
 namespace HostlistDownloader.Modules.HostlistManagement
 {
-    internal class IntegrityChecker
+    internal class HostlistIntegrityValidator
     {
         /// <summary>
         /// Verifies that the number of downloaded files matches the number of configured URLs (minus any
@@ -33,7 +33,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
         /// were reported. Returns false on mismatch instead of exiting immediately, so the caller can attempt
         /// one automatic recovery before treating it as fatal.
         /// </summary>
-        public static bool CheckURLandFileCount(DirectoryInfo listFolder, int urlCount, int knownPermanentFailures)
+        internal static bool CheckURLandFileCount(DirectoryInfo listFolder, int urlCount, int knownPermanentFailures)
         {
             TraceLogger.Log($"Checking URL and file count for {listFolder.FullName}...");
             IEnumerable<string> files = Directory.GetFiles(listFolder.FullName, "*")
@@ -51,7 +51,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
             return true;
         }
 
-        public static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime, bool ProblemDuringUpdate, bool HasDownloadedUpdates)
+        internal static bool CheckIntegrity(string ListFolderLocation, int urlCount, int knownPermanentFailures, string CombinedListLocation, DateTime startTime, bool ProblemDuringUpdate, bool HasDownloadedUpdates)
         {
             TraceLogger.Log("Checking integrity of host files...");
             if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)

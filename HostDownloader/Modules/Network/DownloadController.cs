@@ -23,6 +23,7 @@
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text;
@@ -52,27 +53,8 @@ namespace HostlistDownloader.Modules.Network
         private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
         private const int MaxRetries = 3;
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
-
-        private const int ContentValidationBufferSize = 4096;
-
-        private static readonly string[] HtmlSignatures =
-        [
-            "<html",
-            "<!doctype html",
-            "<head>",
-            "<body>",
-            "<!doctype",
-            "<!document",
-            "<!--"
-        ];
-
-        private static readonly string[] AllowedContentTypePrefixes =
-        [
-            "text/plain",
-            "text/comma-separated-values",
-            "application/octet-stream",
-            "text/csv"
-        ];
+        private const int MaxUrlLength = 2048;
+        private const int MaxLocalPathLength = 255;
 
         static DownloadController()
         {
@@ -83,7 +65,7 @@ namespace HostlistDownloader.Modules.Network
             httpClient.Timeout = DefaultTimeout;
         }
 
-        public static async Task<DownloadOutcome> DownloadFileAsync(
+        internal static async Task<DownloadOutcome> DownloadFileAsync(
             string url,
             string localPath,
             bool forceMode,
@@ -105,7 +87,19 @@ namespace HostlistDownloader.Modules.Network
                 return DownloadOutcome.PermanentFailure;
             }
 
-            if (uri.Scheme == Uri.UriSchemeHttp && !ConfigManager.Instance.AllowInsecureSources)
+            if (url.Length > MaxUrlLength)
+            {
+                TraceLogger.Log($"{fileID} - {workingOnName} | URL exceeds maximum length of {MaxUrlLength} characters: {url}", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+
+            if (await URLSecurityValidator.IsInternalAddress(uri))
+            {
+                TraceLogger.Log($"{fileID} - {workingOnName} | SSRF Protection Fault: URL resolves to a prohibited internal/private IP address: {uri.DnsSafeHost}. Aborting.", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+
+            if (uri.Scheme == Uri.UriSchemeHttp && !AppConfig.Instance.AllowInsecureSources)
             {
                 TraceLogger.Log(
                     $"{fileID} - {workingOnName} | Insecure HTTP source blocked by configuration. " +
@@ -114,16 +108,21 @@ namespace HostlistDownloader.Modules.Network
                 return DownloadOutcome.DownloadBlockedByConfig;
             }
 
-
             if (string.IsNullOrWhiteSpace(localPath))
             {
                 TraceLogger.Log($"{fileID} - {workingOnName} | Local path is null or empty", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
 
+            if (localPath.Length > MaxLocalPathLength)
+            {
+                TraceLogger.Log($"{fileID} - {workingOnName} | Local path exceeds maximum allowed length. Aborting.", Enums.StatusSeverityType.Error);
+                return DownloadOutcome.PermanentFailure;
+            }
+
             string normalizedLocalPath = Path.GetFullPath(localPath);
 
-            string allowedRoot = Path.GetFullPath(IOManager.HostfilesLocation);
+            string allowedRoot = Path.GetFullPath(Paths.HostfilesLocation);
             if (!normalizedLocalPath.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
             {
                 TraceLogger.Log(
@@ -258,7 +257,7 @@ namespace HostlistDownloader.Modules.Network
                     }
 
                     string? contentType = response.Content.Headers.ContentType?.MediaType;
-                    if (!string.IsNullOrEmpty(contentType) && !IsAllowedContentType(contentType))
+                    if (!string.IsNullOrEmpty(contentType) && !URLSecurityValidator.IsAllowedContentType(contentType))
                     {
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | Server returned disallowed Content-Type '{contentType}'. " +
@@ -267,14 +266,14 @@ namespace HostlistDownloader.Modules.Network
                         return DownloadOutcome.ContentRejectedNonText;
                     }
 
-                    long maxBytes = ConfigManager.Instance.MaxListSizeInMB * 1024L * 1024L;
+                    long maxBytes = AppConfig.Instance.MaxListSizeInMB * 1024L * 1024L;
                     long? declaredLength = response.Content.Headers.ContentLength;
 
                     if (declaredLength.HasValue && declaredLength.Value > maxBytes)
                     {
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | Declared content length {declaredLength.Value:N0} bytes exceeds " +
-                            $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting.",
+                            $"{AppConfig.Instance.MaxListSizeInMB} MB limit. Aborting.",
                             Enums.StatusSeverityType.Error);
                         return DownloadOutcome.DownloadBlockedByConfig;
                     }
@@ -285,7 +284,7 @@ namespace HostlistDownloader.Modules.Network
                     {
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | Actual content size {contentBytes.Length:N0} bytes exceeds " +
-                            $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting.",
+                            $"{AppConfig.Instance.MaxListSizeInMB} MB limit. Aborting.",
                             Enums.StatusSeverityType.Error);
                         return DownloadOutcome.DownloadBlockedByConfig;
                     }
@@ -313,7 +312,7 @@ namespace HostlistDownloader.Modules.Network
                         {
                             TraceLogger.Log(
                                 $"{fileID} - {workingOnName} | Decompressed size {decompressedBuffer.Length:N0} bytes exceeds " +
-                                $"{ConfigManager.Instance.MaxListSizeInMB} MB limit. Aborting to prevent decompression bomb.",
+                                $"{AppConfig.Instance.MaxListSizeInMB} MB limit. Aborting to prevent decompression bomb.",
                                 Enums.StatusSeverityType.Error);
                             return DownloadOutcome.DownloadBlockedByConfig;
                         }
@@ -325,7 +324,7 @@ namespace HostlistDownloader.Modules.Network
                         finalContent = contentBytes;
                     }
 
-                    if (!IsPlainTextContent(finalContent))
+                    if (!URLSecurityValidator.IsPlainTextContent(finalContent))
                     {
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | Downloaded content appears to be HTML or non-text data, " +
@@ -359,7 +358,7 @@ namespace HostlistDownloader.Modules.Network
                             Enums.StatusSeverityType.Warning);
                     }
 
-                    HostListManager.HasDownloadedUpdates = true;
+                    HostlistOrchestrator.HasDownloadedUpdates = true;
                     TraceLogger.Log($"{fileID} - {workingOnName} | Download completed successfully ({finalContent.Length:N0} bytes).");
                     return DownloadOutcome.Success;
                 }
@@ -398,72 +397,6 @@ namespace HostlistDownloader.Modules.Network
 
             TraceLogger.Log($"{fileID} - {workingOnName} | Download failed after {MaxRetries} attempts", Enums.StatusSeverityType.Error);
             return DownloadOutcome.TransientFailure;
-        }
-
-        /// <summary>
-        /// Inspects the leading bytes of the content to determine whether it looks like a plain-text
-        /// host list or an HTML / non-text document.
-        /// </summary>
-        private static bool IsPlainTextContent(byte[] content)
-        {
-            int inspectLength = Math.Min(content.Length, ContentValidationBufferSize);
-            string prefix = Encoding.UTF8.GetString(content, 0, inspectLength);
-            string upperPrefix = prefix.ToUpperInvariant();
-            int trimmedStart = 0;
-            while (trimmedStart < Math.Min(upperPrefix.Length, 64)
-                   && char.IsWhiteSpace(upperPrefix[trimmedStart]) || upperPrefix[trimmedStart] == '\uFEFF')
-            {
-                trimmedStart++;
-            }
-
-            string effectivePrefix = upperPrefix[trimmedStart..];
-
-            foreach (string signature in HtmlSignatures)
-            {
-                if (effectivePrefix.StartsWith(signature, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-
-            if (effectivePrefix.StartsWith("<?XML", StringComparison.OrdinalIgnoreCase)
-                && effectivePrefix.Contains("<HTML", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            int controlChars = 0;
-            for (int i = 0; i < inspectLength; i++)
-            {
-                byte b = content[i];
-                if (b < 32 && b is not 9 and not 10 and not 13) // \t, \n, \r
-                {
-                    controlChars++;
-                }
-            }
-
-            if (controlChars > inspectLength / 10)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Returns true if the HTTP Content-Type header matches one of the allowed types for a host list.
-        /// </summary>
-        private static bool IsAllowedContentType(string mediaType)
-        {
-            string normalized = mediaType.Trim().ToLowerInvariant();
-            foreach (string prefix in AllowedContentTypePrefixes)
-            {
-                if (normalized == prefix || normalized.StartsWith(prefix + ";", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            return false;
         }
 
         private static bool IsSystemFile(string path)

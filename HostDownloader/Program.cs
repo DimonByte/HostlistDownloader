@@ -26,6 +26,8 @@ using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.Config;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -38,8 +40,8 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 // Initialize necessary files/directories and config
 IOManager.CreateNecessaryDirectoriesAndFiles();
 TraceLogger.Log("[START] Initializing HostlistDownloader...");
-ConfigManager.Init(IOManager.SettingJsonFileLocation);
-IOManager.CheckForInvalidConfig();
+AppConfig.Init(Paths.SettingJsonFileLocation);
+AppConfigHealthChecker.CheckForInvalidConfig();
 
 // --- PARSE ARGUMENTS ---
 ArgumentResult argsResult;
@@ -69,25 +71,25 @@ if (!NetworkChecker.IsNetworkAvailable())
 TraceLogger.ClearExpiredLogs();
 bool freshMode = argsResult.IsFresh;
 
-HostListManager.StartListProcessing(freshMode);
+HostlistOrchestrator.StartListProcessing(freshMode);
 
 watch.Stop();
 
 // Handle Post-Update Status
-if (!HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
+if (!HostlistOrchestrator.ProblemDuringUpdate && HostlistOrchestrator.HasDownloadedUpdates)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     ListUpdateStats();
     TraceLogger.Log($"[UPDATED] Hostfiles updated successfully. Compile time: {watch.Elapsed.TotalSeconds} seconds total.", Enums.StatusSeverityType.Notice);
 }
-else if (HostListManager.ProblemDuringUpdate && HostListManager.HasDownloadedUpdates)
+else if (HostlistOrchestrator.ProblemDuringUpdate && HostlistOrchestrator.HasDownloadedUpdates)
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
     ListUpdateStats();
     TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully and compiled in {watch.Elapsed.TotalSeconds} seconds. But issues were detected. Please look through the logs for more information.", Enums.StatusSeverityType.Warning);
     Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
 }
-else if (!HostListManager.ProblemDuringUpdate && !HostListManager.HasDownloadedUpdates)
+else if (!HostlistOrchestrator.ProblemDuringUpdate && !HostlistOrchestrator.HasDownloadedUpdates)
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
     ListUpdateStats();
@@ -108,8 +110,8 @@ UpdateChecker.IsUpdateAvailable();
 
 static void ListUpdateStats()
 {
-    TraceLogger.Log($"[STATS] Total hostlists processed: {HostListManager.UpdateStatistics.Count}", Enums.StatusSeverityType.Notice);
-    foreach (var stat in HostListManager.UpdateStatistics)
+    TraceLogger.Log($"[STATS] Total hostlists processed: {HostlistOrchestrator.UpdateStatistics.Count}", Enums.StatusSeverityType.Notice);
+    foreach (var stat in HostlistOrchestrator.UpdateStatistics)
     {
         TraceLogger.Log($"[STATS] {stat}", Enums.StatusSeverityType.Notice);
     }

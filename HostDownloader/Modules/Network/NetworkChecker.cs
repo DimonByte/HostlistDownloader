@@ -2,7 +2,7 @@
 {
     internal class NetworkChecker
     {
-        public static bool IsNetworkAvailable()
+        internal static bool IsNetworkAvailable()
         {
             try
             {

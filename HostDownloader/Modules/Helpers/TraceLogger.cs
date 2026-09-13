@@ -21,6 +21,7 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -36,11 +37,11 @@ namespace HostlistDownloader.Modules.Helpers
         internal static bool QuietMode = false;
         internal static bool DebugMode = false;
         private static readonly Lock _lock = new();
-        private static readonly string _logDirectory = IOManager.LogsLocation;
+        private static readonly string _logDirectory = Paths.LogsLocation;
         private static string _currentDate = DateTime.Now.ToString("dd-MM-yyyy");
         private static DateTime _lastDateCheck = DateTime.MinValue;
 
-        public static void PurgeAllLogs()
+        internal static void PurgeAllLogs()
         {
             foreach (string file in Directory.GetFiles(_logDirectory))
             {
@@ -48,7 +49,7 @@ namespace HostlistDownloader.Modules.Helpers
                 File.Delete(file);
             }
         }
-        public static void ClearExpiredLogs()
+        internal static void ClearExpiredLogs()
         {
             lock (_lock)
             {
@@ -61,7 +62,7 @@ namespace HostlistDownloader.Modules.Helpers
                     int expiryDays = 7;
                     try
                     {
-                        expiryDays = ConfigManager.Instance.LogExpiryInDays;
+                        expiryDays = AppConfig.Instance.LogExpiryInDays;
                     }
                     catch (InvalidOperationException)
                     {
@@ -88,7 +89,7 @@ namespace HostlistDownloader.Modules.Helpers
             }
         }
 
-        public static void Log(string message, StatusSeverityType severity = StatusSeverityType.Information, int PassedErrorCode = 1,
+        internal static void Log(string message, StatusSeverityType severity = StatusSeverityType.Information, int PassedErrorCode = 1,
                               [CallerMemberName] string memberName = "",
                               [CallerLineNumber] int lineNumber = 0)
         {

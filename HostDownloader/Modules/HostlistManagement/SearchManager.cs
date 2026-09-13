@@ -21,6 +21,7 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -47,7 +48,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             string MatchedLine,
             bool IsWildcardMatch);
 
-        public static void Search(string domain)
+        internal static void Search(string domain)
         {
             domain = NormalizeDomain(domain);
             if (string.IsNullOrWhiteSpace(domain))
@@ -58,15 +59,15 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             TraceLogger.Log($"Searching configured lists for '{domain}'...");
 
-            var blockMatches = SearchFolder(IOManager.BlockListFolderLocation, domain, MatchListType.Blocklist);
-            var whiteMatches = SearchFolder(IOManager.WhiteListFolderLocation, domain, MatchListType.Whitelist);
+            var blockMatches = SearchFolder(Paths.BlockListFolderLocation, domain, MatchListType.Blocklist);
+            var whiteMatches = SearchFolder(Paths.WhiteListFolderLocation, domain, MatchListType.Whitelist);
 
-            if (ConfigManager.Instance != null)
+            if (AppConfig.Instance != null)
             {
-                foreach (var entry in ConfigManager.Instance.UserWebsiteBlocklist ?? [])
+                foreach (var entry in AppConfig.Instance.UserWebsiteBlocklist ?? [])
                     CheckUserEntry(entry, domain, MatchListType.Blocklist, blockMatches);
 
-                foreach (var entry in ConfigManager.Instance.UserWebsiteWhitelist ?? [])
+                foreach (var entry in AppConfig.Instance.UserWebsiteWhitelist ?? [])
                     CheckUserEntry(entry, domain, MatchListType.Whitelist, whiteMatches);
             }
             else
@@ -74,7 +75,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 TraceLogger.Log("ConfigReader not initialized. Skipping user-defined lists.", Enums.StatusSeverityType.Warning);
             }
 
-            bool inFinalCombinedList = IsDomainInCompiledList(IOManager.CombinedListFileLocation, domain);
+            bool inFinalCombinedList = IsDomainInCompiledList(Paths.CombinedListFileLocation, domain);
 
             Console.WriteLine();
             Console.WriteLine($"=== Search results for '{domain}' ===");
@@ -128,7 +129,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 Console.WriteLine("Verdict: this domain is only present in a whitelist source, so it is not blocked.");
             }
 
-            Console.WriteLine($"Currently present in {Path.GetFileName(IOManager.CombinedListFileLocation)}: {(inFinalCombinedList ? "YES" : "NO")}");
+            Console.WriteLine($"Currently present in {Path.GetFileName(Paths.CombinedListFileLocation)}: {(inFinalCombinedList ? "YES" : "NO")}");
             Console.WriteLine();
 
             TraceLogger.Log($"Search for '{domain}' complete: {blockMatches.Count} blocklist match(es), {whiteMatches.Count} whitelist match(es), present in final combined list: {inFinalCombinedList}.");

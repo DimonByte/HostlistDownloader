@@ -31,7 +31,7 @@ namespace HostlistDownloader.Modules.Network
     internal class UpdateChecker
     {
         private static readonly string OwnerRepo = "DimonByte/HostlistDownloader";
-        public static async Task BeginUpdateReplacement()
+        internal static async Task BeginUpdateReplacement()
         {
             TraceLogger.Log($"[UPDATE] Starting update replacement process...", Enums.StatusSeverityType.Information);
 
@@ -120,7 +120,7 @@ namespace HostlistDownloader.Modules.Network
             }
         }
 
-        public static bool IsUpdateAvailable()
+        internal static bool IsUpdateAvailable()
         {
             TraceLogger.Log("Checking for HostlistDownloader updates...", Enums.StatusSeverityType.Debug);
             //Get version number of current program

@@ -22,6 +22,7 @@
 
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.Text.Json;
 
 namespace HostlistDownloader.Modules.HostlistManagement
@@ -41,7 +42,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
         /// <item><description><b>removedFileNames</b> – File names from the previous manifest whose URLs are no longer in config (files to delete).</description></item>
         /// </list>
         /// </returns>
-        public static (List<string> addedUrls, List<string> removedFileNames) ReconcileSources(
+        internal static (List<string> addedUrls, List<string> removedFileNames) ReconcileSources(
             string listFolderLocation,
             IReadOnlyList<string> currentConfigUrls)
         {
@@ -104,7 +105,7 @@ namespace HostlistDownloader.Modules.HostlistManagement
         /// in the folder that are no longer referenced by the manifest. This handles the case
         /// where file numbering shifts after a URL removal (e.g. "3-C.txt" becomes "2-C.txt").
         /// </summary>
-        public static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
+        internal static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
         {
             TraceLogger.Log($"Cleaning up orphaned files in {listFolderLocation} based on current _sources.json.", Enums.StatusSeverityType.Debug);
             var validFileNames = new HashSet<string>(validSources.Keys, StringComparer.OrdinalIgnoreCase);
@@ -135,24 +136,31 @@ namespace HostlistDownloader.Modules.HostlistManagement
             }
         }
 
-        public static string GetSourceNameForFile(string fileName, bool isBlockList)
+        internal static string GetSourceNameForFile(string fileName, bool isBlockList)
         {
             TraceLogger.Log($"Retrieving source name for file {fileName} from {(isBlockList ? "blocklist" : "whitelist")} manifest.", Enums.StatusSeverityType.Debug);
-            string manifestPath = Path.Combine(isBlockList ? IOManager.BlockListFolderLocation : IOManager.WhiteListFolderLocation, "_sources.json");
+            string manifestPath = Path.Combine(isBlockList ? Paths.BlockListFolderLocation : Paths.WhiteListFolderLocation, "_sources.json");
             if (!File.Exists(manifestPath))
             {
                 TraceLogger.Log($"Source manifest not found at {manifestPath}.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
             }
 
-            var manifestContent = File.ReadAllText(manifestPath);
-            using var doc = JsonDocument.Parse(manifestContent);
-
-            if (doc.RootElement.TryGetProperty(fileName, out var element))
+            try
             {
-                return element.GetString() ?? fileName;
-            }
+                var manifestContent = File.ReadAllText(manifestPath);
+                var doc = JsonDocument.Parse(manifestContent);
 
-            return fileName;
+                if (doc.RootElement.TryGetProperty(fileName, out var element))
+                {
+                    return element.GetString() ?? fileName;
+                }
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Failed to read source manifest at {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                return fileName; // Fallback to returning the file name
+            }
         }
     }
 }

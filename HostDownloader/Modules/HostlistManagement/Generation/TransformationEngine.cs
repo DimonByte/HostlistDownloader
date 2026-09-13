@@ -22,6 +22,7 @@
 
 using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 using iluvadev.ConsoleProgressBar;
 using System.Diagnostics;
 using System.Net;
@@ -30,9 +31,13 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 {
     internal class TransformationEngine
     {
-        public static void BeginTransformation(string combinedFileLocation) //Cool name.
+        /// <summary>
+        /// Begins the transformation process on the specified combined hosts file by first removing duplicates and then formatting the entries according to the configured format type.
+        /// </summary>
+        /// <param name="combinedFileLocation"></param>
+        internal static void BeginTransformation(string combinedFileLocation) //Cool name.
         {
-            TraceLogger.Log("Starting Transformation... Removing duplicates...");
+            TraceLogger.Log("Starting Transformation...");
             RemoveDuplicates(combinedFileLocation);
             TraceLogger.Log("Formatting hosts...");
             FormatHosts(combinedFileLocation);
@@ -47,10 +52,10 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
         /// depending on the target format. Writes the resulting formatted lines back to the given file and logs errors
         /// if writing fails.</remarks>
         /// <param name="combinedFileLocation">Path to the combined hosts file to read, format, and overwrite.</param>
-        public static void FormatHosts(string combinedFileLocation)
+        private static void FormatHosts(string combinedFileLocation)
         {
             TraceLogger.Log($"Attempting to format Hostfile: {combinedFileLocation}");
-            string formatTypePath = ConfigManager.Instance.Formattype;
+            string formatTypePath = AppConfig.Instance.Formattype;
             string formatType = "domain"; // default format type
 
             try
@@ -177,7 +182,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                             }
                             break;
 
-                        case "ublock":
                         case "ublockorigin":
                         case "uBlock":
                         case "uBlock Origin":
@@ -194,7 +198,6 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                             }
                             break;
 
-                        case "adguard":
                         case "ad-guard":
                         case "AdGuard":
                             if (isWildcard)
@@ -256,7 +259,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 TraceLogger.Log($"Error writing formatted lines to {combinedFileLocation}: {ex}", Enums.StatusSeverityType.Error);
             }
         }
-        public static void RemoveDuplicates(string MergedFileLoc)
+        private static void RemoveDuplicates(string MergedFileLoc)
         {
             try
             {

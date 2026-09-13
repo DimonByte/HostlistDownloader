@@ -54,12 +54,12 @@ namespace HostlistDownloader.Modules.WindowsSystem
     /// Public, read‑only view of the configuration.
     /// To modify configuration, use AddEntry or RemoveEntry which returns a NEW instance.
     /// </summary>
-    public sealed class ConfigManager
+    public sealed class AppConfig
     {
         // Singleton instance for the global config
-        internal static ConfigManager Instance => _instance ?? throw new InvalidOperationException("ConfigReader not yet initialised.");
+        internal static AppConfig Instance => _instance ?? throw new InvalidOperationException("ConfigReader not yet initialised.");
 
-        private static ConfigManager? _instance;
+        private static AppConfig? _instance;
 
         public IReadOnlyList<string> Blocklists { get; init; }
         public IReadOnlyList<string> Whitelist { get; init; }
@@ -72,7 +72,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         public long MaxListSizeInMB { get; init; } = 100;
         public bool AllowRevert { get; init; } = false;
 
-        internal ConfigManager(Settings raw)
+        internal AppConfig(Settings raw)
         {
             TraceLogger.Log($"Initializing ConfigManager with {raw.Blocklists?.Length ?? 0} blocklist(s) and {raw.Whitelist?.Length ?? 0} whitelist(s).", Enums.StatusSeverityType.Debug);
             Blocklists = Array.AsReadOnly(raw.Blocklists ?? []);
@@ -129,7 +129,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <summary>
         /// Creates a new ConfigManager instance with an added entry to the specified list.
         /// </summary>
-        public ConfigManager AddEntry(string targetList, string entry)
+        internal AppConfig AddEntry(string targetList, string entry)
         {
             TraceLogger.Log($"Adding entry '{entry}' to '{targetList}' list.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
@@ -146,7 +146,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             );
 
             // Create new instance to update the singleton if this is the global reader
-            var newReader = new ConfigManager(settings);
+            var newReader = new AppConfig(settings);
 
             if (_instance == this)
             {
@@ -159,7 +159,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <summary>
         /// Creates a new ConfigManager instance with an removed entry from the specified list.
         /// </summary>
-        public ConfigManager RemoveEntry(string targetList, string entry)
+        internal AppConfig RemoveEntry(string targetList, string entry)
         {
             TraceLogger.Log($"Removing entry '{entry}' from '{targetList}' list.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
@@ -175,7 +175,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 AllowRevert: AllowRevert
             );
 
-            var newReader = new ConfigManager(settings);
+            var newReader = new AppConfig(settings);
             if (_instance == this)
             {
                 _instance = newReader;
@@ -209,7 +209,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <summary>
         /// Save the current configuration state to the JSON file.
         /// </summary>
-        public void SaveToDisk(string filePath)
+        internal void SaveToDisk(string filePath)
         {
             TraceLogger.Log($"Saving current configuration to '{filePath}'.", Enums.StatusSeverityType.Debug);
             var settings = new Settings(
@@ -239,7 +239,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <summary>
         /// Create the global configuration from a JSON file path.
         /// </summary>
-        public static void Init(string jsonFilePath)
+        internal static void Init(string jsonFilePath)
         {
             TraceLogger.Log($"Initializing ConfigManager from '{jsonFilePath}'.", Enums.StatusSeverityType.Debug);
             if (_instance != null)
@@ -266,11 +266,11 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 TraceLogger.Log($"Deserialized configuration from '{jsonFilePath}' is null.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
                 return;
             }
-            _ = new ConfigManager(raw);
+            _ = new AppConfig(raw);
             TraceLogger.Log($"Successfully read {jsonFilePath} settings.", Enums.StatusSeverityType.Debug);
         }
 
-        public static void CreateDefaultConfig(string filePath)
+        internal static void CreateDefaultConfig(string filePath)
         {
             TraceLogger.Log($"Creating default configuration at '{filePath}'.", Enums.StatusSeverityType.Debug);
             var defaultConfig = new Settings

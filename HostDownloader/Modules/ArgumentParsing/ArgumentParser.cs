@@ -25,6 +25,7 @@ using HostlistDownloader.Modules.HostlistManagement;
 using HostlistDownloader.Modules.HostlistManagement.Generation;
 using HostlistDownloader.Modules.Network;
 using HostlistDownloader.Modules.WindowsSystem;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 
 namespace HostlistDownloader.Modules.ArgumentParsing
 {
@@ -72,7 +73,7 @@ USER-DEFINED RULES:
         /// </summary>
         /// <param name="args">The raw command-line arguments.</param>
         /// <returns>An ArgumentResult containing parsed flags and values.</returns>
-        public static ArgumentResult Parse(string[] args)
+        internal static ArgumentResult Parse(string[] args)
         {
             //Internal flags
             bool anyMatched = false;
@@ -312,7 +313,7 @@ USER-DEFINED RULES:
                 StatsReport: statsReport
             );
         }
-        public static void PrintHelp()
+        private static void PrintHelp()
         {
             Console.WriteLine(HelpText);
         }
@@ -321,7 +322,7 @@ USER-DEFINED RULES:
         /// Handles the side effects of parsing (e.g., setting quiet mode, purging logs, updating config).
         /// </summary>
         /// <param name="result">The parsed result.</param>
-        public static void ApplySideEffects(ArgumentResult result)
+        internal static void ApplySideEffects(ArgumentResult result)
         {
             TraceLogger.Log($"Applying side effects based on parsed arguments... Argument Results: {result}", Enums.StatusSeverityType.Debug);
             if (result.StatsReport)
@@ -344,7 +345,7 @@ USER-DEFINED RULES:
                 TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    HostListManager.RevertToPreviousVersion();
+                    IOManager.RevertCombinedListsToPreviousVersion();
                 }
                 catch (Exception ex)
                 {
@@ -357,7 +358,7 @@ USER-DEFINED RULES:
                 TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    var diffResult = File.ReadAllLines(IOManager.UpdateStatsLocation);
+                    var diffResult = File.ReadAllLines(Paths.UpdateStatsLocation);
                     if (diffResult.Length == 0)
                     {
                         TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
@@ -381,7 +382,7 @@ USER-DEFINED RULES:
             }
             if (result.MergeMode)
             {
-                HostListManager.StartOfflineListProcessing();
+                HostlistOrchestrator.StartOfflineListProcessing();
             }
 
             if (result.UpdateCheck)
@@ -430,7 +431,7 @@ USER-DEFINED RULES:
                 TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
                 try
                 {
-                    IOManager.RunDuplicateCheck();
+                    HostlistDuplicateAnalyser.CheckDuplicationAcrossHostlists();
                 }
                 catch (Exception ex)
                 {
@@ -444,7 +445,7 @@ USER-DEFINED RULES:
                 TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
                 try
                 {
-                    IOManager.AnalyseDuplicate(result.AnalyseDuplicateSource);
+                    HostlistDuplicateAnalyser.CheckDuplicationOnSpecificHostlist(result.AnalyseDuplicateSource);
                     TraceLogger.Log($"Analysed duplicates for source: {result.AnalyseDuplicateSource}", Enums.StatusSeverityType.Notice);
                 }
                 catch (Exception ex)
@@ -468,23 +469,23 @@ USER-DEFINED RULES:
                 try
                 {
                     //Check if it exists in blocklist or whitelist folders
-                    if (!File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)) &&
-                        !File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    if (!File.Exists(Path.Combine(Paths.BlockListFolderLocation, result.GetSourceName)) &&
+                        !File.Exists(Path.Combine(Paths.WhiteListFolderLocation, result.GetSourceName)))
                     {
                         TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
                         Environment.Exit(1);
                     }
-                    else if (File.Exists(Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName)))
+                    else if (File.Exists(Path.Combine(Paths.BlockListFolderLocation, result.GetSourceName)))
                     {
                         TraceLogger.Log($"Source file '{result.GetSourceName}' found in blocklist folder.", Enums.StatusSeverityType.Notice);
-                        string sourcePath = Path.Combine(IOManager.BlockListFolderLocation, result.GetSourceName);
+                        string sourcePath = Path.Combine(Paths.BlockListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, true);
                         TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Notice);
                     }
-                    else if (File.Exists(Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName)))
+                    else if (File.Exists(Path.Combine(Paths.WhiteListFolderLocation, result.GetSourceName)))
                     {
                         TraceLogger.Log($"Source file '{result.GetSourceName}' found in whitelist folder.", Enums.StatusSeverityType.Notice);
-                        string sourcePath = Path.Combine(IOManager.WhiteListFolderLocation, result.GetSourceName);
+                        string sourcePath = Path.Combine(Paths.WhiteListFolderLocation, result.GetSourceName);
                         string sourceName = SourceManager.GetSourceNameForFile(result.GetSourceName, false);
                         TraceLogger.Log($"Retrieved source: {sourceName}", Enums.StatusSeverityType.Notice);
                     }
@@ -516,8 +517,8 @@ USER-DEFINED RULES:
         private static void HandleConfigUpdates(ArgumentResult result)
         {
             TraceLogger.Log("Updating configuration based on command-line arguments...", Enums.StatusSeverityType.Debug);
-            var config = ConfigManager.Instance;
-            var settingsPath = IOManager.SettingJsonFileLocation;
+            var config = AppConfig.Instance;
+            var settingsPath = Paths.SettingJsonFileLocation;
 
             if (string.IsNullOrEmpty(settingsPath))
             {
