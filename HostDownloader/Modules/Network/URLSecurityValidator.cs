@@ -50,40 +50,31 @@ namespace HostlistDownloader.Modules.Network
             "text/csv"
         ];
         private const int ContentValidationBufferSize = 4096;
-        /// <summary>
-        /// Validates a URL from the configuration instance, ensuring it is well-formed and uses the HTTP or HTTPS scheme. If valid, returns a list containing the URL; otherwise, logs a warning and returns null.
-        /// </summary>
-        /// <param name="urlInstance"></param>
-        /// <returns></returns>
-        internal static List<string> ValidateURLsFromConfigInstance(string urlInstance)
-        {
-            var urls = new List<string>();
 
+        internal static bool ValidateURLFromConfigInstance(string urlInstance)
+        {
             try
             {
                 if (string.IsNullOrWhiteSpace(urlInstance) || urlInstance.StartsWith('#'))
-                    return null!;
-
+                    return false;
                 if (!Uri.TryCreate(urlInstance, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
                 {
                     TraceLogger.Log($"Invalid URL format in config instance: {urlInstance}", Enums.StatusSeverityType.Warning);
-                    return null!;
+                    return false;
                 }
-
-                urls.Add(urlInstance.Trim());
-
-                if (urls.Count == 0)
+                urlInstance = urlInstance.Trim();
+                if (urlInstance.Length == 0)
                 {
-                    TraceLogger.Log($"No URLs in {urlInstance}.", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Empty URL in config instance: {urlInstance}", Enums.StatusSeverityType.Warning);
+                    return false;
                 }
-
-                return urls;
+                return true;
             }
             catch (Exception ex)
             {
                 HostlistOrchestrator.ProblemDuringUpdate = true;
                 TraceLogger.Log($"Error validating URL {urlInstance} in config instance: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.InvalidConfigEntry);
-                return null!;
+                return false;
             }
         }
 

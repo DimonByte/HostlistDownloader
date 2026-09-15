@@ -206,14 +206,14 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
             foreach (var urlInstance in listConfigInstance)
             {
-                var urls = URLSecurityValidator.ValidateURLsFromConfigInstance(urlInstance);
-                if (urls != null)
+                var isValid = URLSecurityValidator.ValidateURLFromConfigInstance(urlInstance);
+                if (isValid)
                 {
-                    allUrls.AddRange(urls);
+                    allUrls.Add(urlInstance);
                 }
                 else
                 {
-                    TraceLogger.Log($"Null URL value in {ListFolderLocation} config. Ignoring value.", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Invalid URL skipped: {urlInstance}. Please check your settings.json configuration.", Enums.StatusSeverityType.Warning);
                 }
             }
 
