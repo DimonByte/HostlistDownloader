@@ -21,8 +21,9 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.Helpers;
+using HostlistDownloader.Modules.WindowsSystem.IO;
 
-namespace HostlistDownloader.Modules.WindowsSystem.IO
+namespace HostlistDownloader.Modules.HostlistManagement
 {
     internal class HostlistDuplicateAnalyser
     {

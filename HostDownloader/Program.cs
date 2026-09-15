@@ -70,7 +70,7 @@ if (!NetworkChecker.IsNetworkAvailable())
 }
 TraceLogger.ClearExpiredLogs();
 bool freshMode = argsResult.IsFresh;
-
+//TraceLogger.DebugMode = true;
 HostlistOrchestrator.StartListProcessing(freshMode);
 
 watch.Stop();
@@ -110,10 +110,11 @@ UpdateChecker.IsUpdateAvailable();
 
 static void ListUpdateStats()
 {
-    TraceLogger.Log($"[STATS] Total hostlists processed: {HostlistOrchestrator.UpdateStatistics.Count}", Enums.StatusSeverityType.Notice);
+    TraceLogger.Log($"[STATS] {HostlistOrchestrator.UpdateText}", Enums.StatusSeverityType.Notice);
+    TraceLogger.Log($"[STATS] Total hostlists processed: {HostlistOrchestrator.UpdateStatistics.Count}. Updated Hostlists:", Enums.StatusSeverityType.Notice);
     foreach (var stat in HostlistOrchestrator.UpdateStatistics)
     {
-        TraceLogger.Log($"[STATS] {stat}", Enums.StatusSeverityType.Notice);
+        TraceLogger.Log($"{stat}", Enums.StatusSeverityType.Notice);
     }
 }
 TraceLogger.Log($"[END OF LOG]");

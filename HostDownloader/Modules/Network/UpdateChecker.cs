@@ -28,7 +28,7 @@ using System.Text.RegularExpressions;
 
 namespace HostlistDownloader.Modules.Network
 {
-    internal class UpdateChecker
+    internal partial class UpdateChecker
     {
         private static readonly string OwnerRepo = "DimonByte/HostlistDownloader";
         internal static async Task BeginUpdateReplacement()
@@ -202,7 +202,7 @@ namespace HostlistDownloader.Modules.Network
                 TraceLogger.Log($"No redirect found for {url}, status code: {(int)resp.StatusCode} {resp.StatusCode}. Attempting HTML parsing fallback.", Enums.StatusSeverityType.Debug);
                 // Fallback: some servers may not redirect; parse the HTML for /releases/tag/<tag>
                 var html = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                Match m = Regex.Match(html, @"/releases/tag/([^""'\s<>]+)");
+                Match m = VersionRegex().Match(html);
                 if (m.Success && m.Groups.Count > 1)
                 {
                     TraceLogger.Log($"Extracted tag from HTML: {m.Groups[1].Value}", Enums.StatusSeverityType.Debug);
@@ -216,5 +216,8 @@ namespace HostlistDownloader.Modules.Network
             TraceLogger.Log($"Failed to get latest release tag for {ownerRepo}.", Enums.StatusSeverityType.Error);
             return "";
         }
+
+        [GeneratedRegex(@"/releases/tag/([^""'\s<>]+)")]
+        private static partial Regex VersionRegex();
     }
 }

@@ -44,18 +44,19 @@ namespace HostlistDownloader.Modules.Network
         Cancelled,
         DownloadBlockedByConfig,
         NotStarted,
-        ContentRejectedNonText
+        ContentRejectedNonText,
+        SecurityViolationDetected
     }
 
     internal class DownloadController
     {
-        private static readonly HttpClient httpClient = new();
+        private static readonly HttpClient httpClient = new(SSRFProtectedHttpHandler.Create());
         private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
         private const int MaxRetries = 3;
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
         private const int MaxUrlLength = 2048;
         private const int MaxLocalPathLength = 255;
-
+        private static readonly long maxBytes = AppConfig.Instance.MaxListSizeInMB * 1024L * 1024L;
         static DownloadController()
         {
             httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
@@ -87,15 +88,16 @@ namespace HostlistDownloader.Modules.Network
                 return DownloadOutcome.PermanentFailure;
             }
 
-            if (url.Length > MaxUrlLength)
+            // The real protection is SSRFProtectedHttpHandler's ConnectCallback on httpClient, which resolves once and connects directly to the vetted address for the actual request.
+            if (await URLSecurityValidator.IsInternalAddressDNS(uri))
             {
-                TraceLogger.Log($"{fileID} - {workingOnName} | URL exceeds maximum length of {MaxUrlLength} characters: {url}", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | SSRF Protection Fault: URL resolves to a prohibited internal/private IP address: {uri.DnsSafeHost}. Aborting.", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
 
-            if (await URLSecurityValidator.IsInternalAddress(uri))
+            if (url.Length > MaxUrlLength)
             {
-                TraceLogger.Log($"{fileID} - {workingOnName} | SSRF Protection Fault: URL resolves to a prohibited internal/private IP address: {uri.DnsSafeHost}. Aborting.", Enums.StatusSeverityType.Error);
+                TraceLogger.Log($"{fileID} - {workingOnName} | URL exceeds maximum length of {MaxUrlLength} characters: {url}", Enums.StatusSeverityType.Error);
                 return DownloadOutcome.PermanentFailure;
             }
 
@@ -228,7 +230,7 @@ namespace HostlistDownloader.Modules.Network
                     }
 
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    linkedCts.CancelAfter(TimeSpan.FromMinutes(5));
+                    linkedCts.CancelAfter(DefaultTimeout);
 
                     using HttpResponseMessage response = await httpClient.GetAsync(url, linkedCts.Token).ConfigureAwait(false);
 
@@ -266,7 +268,6 @@ namespace HostlistDownloader.Modules.Network
                         return DownloadOutcome.ContentRejectedNonText;
                     }
 
-                    long maxBytes = AppConfig.Instance.MaxListSizeInMB * 1024L * 1024L;
                     long? declaredLength = response.Content.Headers.ContentLength;
 
                     if (declaredLength.HasValue && declaredLength.Value > maxBytes)
@@ -369,10 +370,14 @@ namespace HostlistDownloader.Modules.Network
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    // Timeout on the per-attempt linked CTS.
                     TraceLogger.Log($"{fileID} - {workingOnName} | Attempt {attempt} timed out", Enums.StatusSeverityType.Error);
                     if (attempt < MaxRetries)
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException hre) when (hre.Message.Contains("SSRF"))
+                {
+                    TraceLogger.Log($"{fileID} - {workingOnName} | SSRF protection fault: possible attempt detected: {hre.Message}", Enums.StatusSeverityType.Warning);
+                    return DownloadOutcome.SecurityViolationDetected;
                 }
                 catch (HttpRequestException hre)
                 {

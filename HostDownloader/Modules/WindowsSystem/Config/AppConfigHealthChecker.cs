@@ -1,11 +1,33 @@
-﻿using HostlistDownloader.Modules.Helpers;
+﻿//MIT License
+
+//Copyright (c) 2026 Dimon
+
+//Permission is hereby granted, free of charge, to any person obtaining a copy
+//of this software and associated documentation files (the "Software"), to deal
+//in the Software without restriction, including without limitation the rights
+//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//copies of the Software, and to permit persons to whom the Software is
+//furnished to do so, subject to the following conditions:
+
+//The above copyright notice and this permission notice shall be included in all
+//copies or substantial portions of the Software.
+
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//SOFTWARE.
+
+using HostlistDownloader.Modules.Helpers;
 using HostlistDownloader.Modules.WindowsSystem.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace HostlistDownloader.Modules.WindowsSystem.Config
 {
-    internal class AppConfigHealthChecker
+    internal partial class AppConfigHealthChecker
     {
         internal static void CheckForInvalidConfig()
         {
@@ -75,16 +97,23 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
         {
             corruptionDetected = false;
             var validUrls = new List<string>();
-            var urlOrDomainRegex = new Regex(
-                @"^(https?:\/\/|ftp:\/\/)?[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?)+(?:\/[\w\-.*~=+@!$&'()*+,;:%]*)*$",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled
-            );
+            var domainRegex = URLValidationRegex();
 
             foreach (var url in rawUrls.Select(u => u.Trim()))
             {
                 if (string.IsNullOrEmpty(url)) continue;
 
-                bool isValid = Uri.TryCreate(url, UriKind.Absolute, out _) || urlOrDomainRegex.IsMatch(url);
+                bool isValid = Uri.TryCreate(url, UriKind.Absolute, out _);
+
+                if (!isValid && url.Contains('*'))
+                {
+                    isValid = IsValidWildcardPattern(url, domainRegex);
+                }
+
+                if (!isValid && domainRegex.IsMatch(url))
+                {
+                    isValid = true;
+                }
 
                 if (isValid)
                 {
@@ -101,16 +130,31 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
         }
 
         /// <summary>
+        /// Validates wildcard domain patterns (e.g., *.example.com or example.*) 
+        /// by stripping the wildcard and validating the remaining base structure.
+        /// </summary>
+        private static bool IsValidWildcardPattern(string input, Regex domainRegex)
+        {
+            if (input.Count(c => c == '*') != 1) return false;
+            bool startsWithStar = input.StartsWith('*');
+            bool endsWithStar = input.EndsWith('*');
+            if (!startsWithStar && !endsWithStar) return false;
+
+            string basePart = input.TrimStart('*', '.').TrimEnd('*', '.');
+            if (string.IsNullOrEmpty(basePart)) return false;
+
+            // Validate the remaining part as a standard domain/URL
+            return domainRegex.IsMatch(basePart);
+        }
+
+        /// <summary>
         /// Validates a list of domains against strict RFC DNS standards.
         /// </summary>
         private static List<string> ValidateAndFilterDomains(IEnumerable<string> rawDomains, string contextName, out bool corruptionDetected)
         {
             corruptionDetected = false;
             var validDomains = new List<string>();
-            var domainRegex = new Regex(
-                @"^(?:(?:xn--)?[a-z0-9]+(?:-+[a-z0-9]+)*\.)+[a-z]{2,}$",
-                RegexOptions.Compiled | RegexOptions.IgnoreCase
-            );
+            var domainRegex = DomainRegex();
 
             foreach (var domain in rawDomains.Select(d => d.Trim()))
             {
@@ -153,7 +197,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                 AllowRevert = AppConfig.Instance.AllowRevert
             };
 
-            var options = new JsonSerializerOptions
+            JsonSerializerOptions options = new()
             {
                 WriteIndented = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -165,5 +209,10 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
 
             TraceLogger.Log("Configuration file has been updated with only valid entries.", Enums.StatusSeverityType.Information);
         }
+
+        [GeneratedRegex(@"^(?:(?:xn--)?[a-z0-9]+(?:-+[a-z0-9]+)*\.)+[a-z]{2,}$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-GB")]
+        private static partial Regex DomainRegex();
+        [GeneratedRegex(@"^(https?:\/\/|ftp:\/\/)?[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?)*(?:\/[\w\-.*~=+@!$&'()*+,;:%]*)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-GB")]
+        private static partial Regex URLValidationRegex();
     }
 }

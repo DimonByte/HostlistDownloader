@@ -50,6 +50,11 @@ namespace HostlistDownloader.Modules.Network
             "text/csv"
         ];
         private const int ContentValidationBufferSize = 4096;
+        /// <summary>
+        /// Validates a URL from the configuration instance, ensuring it is well-formed and uses the HTTP or HTTPS scheme. If valid, returns a list containing the URL; otherwise, logs a warning and returns null.
+        /// </summary>
+        /// <param name="urlInstance"></param>
+        /// <returns></returns>
         internal static List<string> ValidateURLsFromConfigInstance(string urlInstance)
         {
             var urls = new List<string>();
@@ -59,7 +64,6 @@ namespace HostlistDownloader.Modules.Network
                 if (string.IsNullOrWhiteSpace(urlInstance) || urlInstance.StartsWith('#'))
                     return null!;
 
-                // Validate the URL format using a regex pattern
                 if (!Uri.TryCreate(urlInstance, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
                 {
                     TraceLogger.Log($"Invalid URL format in config instance: {urlInstance}", Enums.StatusSeverityType.Warning);
@@ -84,9 +88,9 @@ namespace HostlistDownloader.Modules.Network
         }
 
         /// <summary>
-        ///Prevents SSRF by resolving the host and checking if any resulting IP is in a private, loopback, or link-local range.
+        ///Prevents SSRF by resolving the host via DNS and checking if any resulting IP is in a private, loopback, or link-local range.
         /// </summary>
-        internal static async Task<bool> IsInternalAddress(Uri uri)
+        internal static async Task<bool> IsInternalAddressDNS(Uri uri)
         {
             try
             {
@@ -104,7 +108,6 @@ namespace HostlistDownloader.Modules.Network
                         if (bytes[0] == 127) return true;
 
                         //IPv4 Link-Local (169.254.0.0/16)
-                        //Crucial for preventing AWS/Azure/GCP metadata theft
                         if (bytes[0] == 169 && bytes[1] == 254) return true;
                         //10.0.0.0/8
                         if (bytes[0] == 10) return true;
@@ -133,30 +136,77 @@ namespace HostlistDownloader.Modules.Network
         }
 
         /// <summary>
+        /// Returns true if the given address is in a private, loopback, or link-local range. Used for SSRF protection class.
+        /// </summary>
+        internal static bool IsInternalAddressSSRF(IPAddress address)
+        {
+            if (address.Equals(IPAddress.Loopback) || address.Equals(IPAddress.IPv6Loopback))
+                return true;
+
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                byte[] bytes = address.GetAddressBytes();
+
+                // 127.0.0.0/8
+                if (bytes[0] == 127) return true;
+                // 169.254.0.0/16 (link-local - crucial for cloud metadata endpoints)
+                if (bytes[0] == 169 && bytes[1] == 254) return true;
+                // 10.0.0.0/8
+                if (bytes[0] == 10) return true;
+                // 172.16.0.0/12
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+                // 192.168.0.0/16
+                if (bytes[0] == 192 && bytes[1] == 168) return true;
+            }
+            else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                // fe80::/10
+                if (address.IsIPv6LinkLocal) return true;
+                // fc00::/7 (unique local)
+                byte[] v6Bytes = address.GetAddressBytes();
+                if (v6Bytes[0] == 0xfc || v6Bytes[0] == 0xfd) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Inspects the leading bytes of the content to determine whether it looks like a plain-text
         /// host list or an HTML / non-text document.
         /// </summary>
         internal static bool IsPlainTextContent(byte[] content)
         {
+            if (content == null || content.Length == 0)
+                return true; // Empty/null is treated as valid (adjust if needed)
+
             int inspectLength = Math.Min(content.Length, ContentValidationBufferSize);
-            string prefix = Encoding.UTF8.GetString(content, 0, inspectLength);
+            string prefix;
+            try
+            {
+                prefix = Encoding.UTF8.GetString(content, 0, inspectLength);
+            }
+            catch (DecoderFallbackException)
+            {
+                return false;
+            }
+
             int trimmedStart = 0;
-            while (trimmedStart < Math.Min(prefix.Length, 64)
-                   && (char.IsWhiteSpace(prefix[trimmedStart]) || prefix[trimmedStart] == '\uFEFF'))
+            while (trimmedStart < Math.Min(prefix.Length, 64) &&
+                   (char.IsWhiteSpace(prefix[trimmedStart]) || prefix[trimmedStart] == '\uFEFF'))
             {
                 trimmedStart++;
             }
 
             ReadOnlySpan<char> effectivePrefix = prefix.AsSpan(trimmedStart);
 
-            foreach (string signature in HtmlSignatures)
+            foreach (string sig in HtmlSignatures)
             {
-                if (effectivePrefix.StartsWith(signature, StringComparison.OrdinalIgnoreCase))
+                if (effectivePrefix.StartsWith(sig, StringComparison.OrdinalIgnoreCase))
                     return false;
             }
 
-            if (effectivePrefix.StartsWith("<?XML", StringComparison.OrdinalIgnoreCase)
-                && effectivePrefix.Contains("<HTML", StringComparison.OrdinalIgnoreCase))
+            if (effectivePrefix.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase) &&
+                effectivePrefix.Contains("<html", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -165,11 +215,12 @@ namespace HostlistDownloader.Modules.Network
             for (int i = 0; i < inspectLength; i++)
             {
                 byte b = content[i];
-                if (b < 32 && b is not 9 and not 10 and not 13)
+                if (b < 32 && b != 9 && b != 10 && b != 13)
+                {
                     controlChars++;
+                }
             }
-
-            return controlChars <= inspectLength / 10;
+            return controlChars <= 1;
         }
 
         /// <summary>

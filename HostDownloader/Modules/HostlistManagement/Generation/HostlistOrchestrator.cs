@@ -34,6 +34,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
         internal static bool ProblemDuringUpdate;
         internal static bool HasDownloadedUpdates;
         internal static List<string> UpdateStatistics = [];
+        internal static string UpdateText = "";
         internal static bool hasUpdates = false;
 
         internal static void StartListProcessing(bool forceMode, CancellationToken cancellationToken = default)
@@ -73,7 +74,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
                 ProcessDownloadLists(blockListInstance,
                     Paths.BlockListFolderLocation,
-                    Paths.CombinedBlockListFileLocationTemp, forceMode, cancellationToken).GetAwaiter().GetResult();
+                    Paths.CombinedBlockListFileLocationTemp, forceMode, false, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -111,7 +112,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                 TraceLogger.Log("Whitelist is configured. Updating whitelists...");
                 ProcessDownloadLists(whiteListInstance,
                     Paths.WhiteListFolderLocation,
-                    Paths.CombinedWhiteListFileLocationTemp, forceMode, cancellationToken).GetAwaiter().GetResult();
+                    Paths.CombinedWhiteListFileLocationTemp, forceMode, false, cancellationToken).GetAwaiter().GetResult();
             }
             else
             {
@@ -197,7 +198,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             Environment.Exit(0);
         }
 
-        private static async Task ProcessDownloadLists(string[] listConfigInstance, string ListFolderLocation, string CombinedListLocation, bool forceMode, CancellationToken cancellationToken = default, bool isRetryAttempt = false)
+        private static async Task ProcessDownloadLists(string[] listConfigInstance, string ListFolderLocation, string CombinedListLocation, bool forceMode, bool isRetryAttempt = false, CancellationToken cancellationToken = default)
         {
             TraceLogger.Log($"Starting download for INI files. ListFolderLocation: {ListFolderLocation} | CombinedListLocation: {CombinedListLocation}", Enums.StatusSeverityType.Debug);
 
@@ -302,43 +303,58 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
                             switch (outcome)
                             {
                                 case DownloadOutcome.Success:
+                                    UpdateStatistics.Add($"{fileName} downloaded successfully.");
                                     TraceLogger.Log($"{fileName} downloaded successfully.");
                                     break;
                                 case DownloadOutcome.SkippedUpToDate:
+                                    //UpdateStatistics.Add($"{fileName} already up to date, skipped.");
                                     TraceLogger.Log($"{fileName} already up to date, skipped.");
                                     break;
                                 case DownloadOutcome.PermanentFailure:
+                                    UpdateStatistics.Add($"{fileName} is permanently unreachable (e.g. 404). Fix or remove this source from settings.json.");
                                     ProblemDuringUpdate = true;
                                     TraceLogger.Log($"{url} is permanently unreachable (e.g. 404) and will be skipped in the integrity check. Fix or remove this source from settings.json.", Enums.StatusSeverityType.Warning);
                                     break;
                                 case DownloadOutcome.TransientFailure:
+                                    UpdateStatistics.Add($"{fileName} failed after retries. This may succeed on a later run. Check logs for more details.");
                                     ProblemDuringUpdate = true;
                                     TraceLogger.Log($"Download of {url} failed after retries. This may succeed on a later run. Check logs for more details.", Enums.StatusSeverityType.Error);
                                     break;
                                 case DownloadOutcome.Cancelled:
+                                    UpdateStatistics.Add($"{fileName} download was cancelled.");
                                     TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
                                     break;
                                 case DownloadOutcome.DownloadBlockedByConfig:
+                                    UpdateStatistics.Add($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).");
                                     ProblemDuringUpdate = true;
                                     TraceLogger.Log($"{fileName} download was blocked by settings.json configuration (e.g. allowInsecureSources was false and HLD attempted to download from HTTP.).", Enums.StatusSeverityType.Warning);
                                     break;
                                 case DownloadOutcome.NotStarted:
+                                    UpdateStatistics.Add($"{fileName} download was not started. This is unexpected and may indicate a bug.");
                                     ProblemDuringUpdate = true;
                                     TraceLogger.Log($"Download of {url} was not started. This is unexpected and may indicate a bug.", Enums.StatusSeverityType.Error);
                                     break;
                                 case DownloadOutcome.ContentRejectedNonText:
+                                    UpdateStatistics.Add($"{fileName} download was rejected because the content was not a text file. This may indicate a misconfigured source or a change in the source's content type.");
                                     ProblemDuringUpdate = true;
                                     TraceLogger.Log($"Download of {url} was rejected because the content was not a text file. This may indicate a misconfigured source or a change in the source's content type.", Enums.StatusSeverityType.Warning);
+                                    break;
+                                case DownloadOutcome.SecurityViolationDetected:
+                                    UpdateStatistics.Add($"{fileName} download was blocked due to a security violation (e.g. SSRF protection fault).");
+                                    ProblemDuringUpdate = true;
+                                    TraceLogger.Log($"Download of {url} was blocked due to a security violation (e.g. SSRF protection fault).", Enums.StatusSeverityType.Warning);
                                     break;
                             }
                         }
                         catch (OperationCanceledException) when (ct.IsCancellationRequested)
                         {
+                            UpdateStatistics.Add($"{fileName} download was cancelled.");
                             outcomes[url] = DownloadOutcome.Cancelled;
                             TraceLogger.Log($"{fileName} download was cancelled.", Enums.StatusSeverityType.Warning);
                         }
                         catch (Exception ex)
                         {
+                            UpdateStatistics.Add($"{fileName} download failed with an unexpected error: {ex.Message}");
                             outcomes[url] = DownloadOutcome.TransientFailure;
                             ProblemDuringUpdate = true;
                             TraceLogger.Log($"Failed to download {url}: {ex}", Enums.StatusSeverityType.Error);
@@ -379,7 +395,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
             //Add string to UpdateStatistics array on the next available index.
             string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
             $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
-            UpdateStatistics.Add(InternalUpdateStats);
+            UpdateText = InternalUpdateStats;
             TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Notice);
 
             if (transientFailures > 0)
@@ -425,7 +441,7 @@ namespace HostlistDownloader.Modules.HostlistManagement.Generation
 
             TraceLogger.Log("Attempting automatic recovery: clearing this list's folder and re-downloading everything once...", Enums.StatusSeverityType.Warning);
             IOManager.ClearTempFiles(ListFolderLocation);
-            await ProcessDownloadLists(listConfigInstance, ListFolderLocation, CombinedListLocation, forceMode: true, cancellationToken, isRetryAttempt: true);
+            await ProcessDownloadLists(listConfigInstance, ListFolderLocation, CombinedListLocation, forceMode: true, isRetryAttempt: true, cancellationToken: cancellationToken);
         }
 
         /// <summary>
