@@ -20,12 +20,12 @@ jobs:
 
     - name: Restore dependencies
       run: dotnet restore HostlistDownloader.slnx
-      working-directory: ./HostDownloader
+      working-directory: ./src/HostlistDownloaderCLI
 
     - name: Build
       run: dotnet build HostlistDownloader.slnx --configuration Release --no-restore
-      working-directory: ./HostDownloader
+      working-directory: ./src/HostlistDownloaderCLI
 
     - name: Test
       run: dotnet test HostlistDownloader.slnx --no-build --verbosity normal
-      working-directory: ./HostDownloader
+      working-directory: ./src/HostlistDownloaderCLI
