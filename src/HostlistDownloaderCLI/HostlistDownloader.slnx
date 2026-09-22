@@ -1,4 +1,3 @@
 <Solution>
-  <Project Path="../HostListDownloaderGUI/HostListDownloaderGUI.csproj" Id="61890a6c-e313-4d7b-96c6-94b19b927bc9" />
   <Project Path="HostlistDownloaderCLI.csproj" />
 </Solution>
