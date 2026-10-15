@@ -1,6 +1,6 @@
 ﻿namespace HostlistDownloaderCLI.Modules.Network
 {
-    internal class NetworkChecker
+    internal class NetworkUpChecker
     {
         internal static bool IsNetworkAvailable()
         {

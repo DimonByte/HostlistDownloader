@@ -1,4 +1,4 @@
-﻿namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
+﻿namespace HostlistDownloaderCLI.Modules.IO
 {
     internal class Paths
     {

@@ -89,12 +89,12 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 MaxListSizeInMB = raw.MaxListSizeInMB.Value;
             if (MaxListSizeInMB < 1)
             {
-                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is invalid. Falling back to 100.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is invalid. Falling back to 100.", Enums.StatusSeverityType.Warn);
                 MaxListSizeInMB = 100;
             }
             if (MaxListSizeInMB > 1000)
             {
-                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is unreasonably high and may cause performance issues. Clamping to 1000.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Configured maxListSizeInMB ({MaxListSizeInMB}) is unreasonably high and may cause performance issues. Clamping to 1000.", Enums.StatusSeverityType.Warn);
                 MaxListSizeInMB = 1000;
             }
             if (raw.AllowRevert.HasValue)
@@ -103,12 +103,12 @@ namespace HostlistDownloader.Modules.WindowsSystem
             // Validation Logic
             if (MaxDownloadThreads < 1)
             {
-                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is invalid. Falling back to 1.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is invalid. Falling back to 1.", Enums.StatusSeverityType.Warn);
                 MaxDownloadThreads = 1;
             }
             else if (MaxDownloadThreads > 25)
             {
-                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is unreasonably high and may get you rate-limited or blocked. Clamping to 25.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Configured maxDownloadThreads ({MaxDownloadThreads}) is unreasonably high and may get you rate-limited or blocked. Clamping to 25.", Enums.StatusSeverityType.Warn);
                 MaxDownloadThreads = 25;
             }
 
@@ -117,7 +117,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
 
             if (LogExpiryInDays < 0)
             {
-                TraceLogger.Log($"Configured logExpiryInDays ({LogExpiryInDays}) is invalid. Falling back to 7.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Configured logExpiryInDays ({LogExpiryInDays}) is invalid. Falling back to 7.", Enums.StatusSeverityType.Warn);
                 LogExpiryInDays = 7;
             }
 

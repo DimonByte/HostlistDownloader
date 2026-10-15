@@ -23,11 +23,10 @@
 using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules.Helpers;
 using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
-using iluvadev.ConsoleProgressBar;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
-namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
+namespace HostlistDownloaderCLI.Modules.IO
 {
     internal class IOManager
     {
@@ -83,7 +82,12 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
             }
             if (ShowHelp)
             {
-                Console.WriteLine("[!] Configuration files and folders have been created in the directory where this program is stored. (settings.json)\nPlease refer to the documentation on the main GitHub page of HostlistDownloader to configure. Once configured, run HostlistDownloader again. HostlistDownloader will now exit.");
+                Spectre.Console.AnsiConsole.Write(new Spectre.Console.Panel(new Spectre.Console.Markup("Configuration files and folders have been created in the directory where this program is stored ([cyan]settings.json[/]).\nPlease refer to the documentation on the main GitHub page of HostlistDownloader to configure.\nOnce configured, run HostlistDownloader again. HostlistDownloader will now exit."))
+                {
+                    Header = new Spectre.Console.PanelHeader("[yellow] First run [/]"),
+                    Border = Spectre.Console.BoxBorder.Rounded,
+                    BorderStyle = Spectre.Console.Style.Parse("yellow")
+                });
                 Environment.Exit(ErrorCodes.GeneralError);
             }
         }
@@ -98,7 +102,7 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
 
             if (files.Length == 0)
             {
-                TraceLogger.Log($"No files found to merge in {sourceFolder}.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"No files found to merge in {sourceFolder}.", Enums.StatusSeverityType.Warn);
                 return;
             }
 
@@ -109,25 +113,8 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                 //ConsoleProgress.ShowOperationProgress(0, files.Length, "Merging files");
 
                 int max = files.Length;
-                //Create the ProgressBar
-                using (var pb = new ProgressBar() { Maximum = max })
+                ConsoleUI.Progress("Merging files", max, "files", progress =>
                 {
-                    if (TraceLogger.QuietMode)
-                    {
-                        pb.Text.Body.SetVisible(false);
-                    }
-                    //Clear "Description Text"
-                    pb.Text.Description.Clear();
-
-                    //Setting "Description Text" when "Processing"
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Merging file: {pb.ElementName}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Merged file count: {pb.Value}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
-
-                    //Setting "Description Text" when "Done"
-                    pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} files merged in {pb.TimeProcessing.TotalSeconds}s.");
-
                     foreach (var file in files)
                     {
                         TraceLogger.Log($"Merging file: {file}", Enums.StatusSeverityType.Debug);
@@ -141,14 +128,14 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                             }
                         }
                         //Thread.Sleep(1);
-                        pb.PerformStep(file);
+                        progress.Advance(Path.GetFileName(file));
                         //processedFiles++;
                         //ConsoleProgress.ShowOperationProgress(processedFiles, files.Length, "Merging files");
                     }
-                }
+                });
                 writer.Flush();
                 watch.Stop();
-                TraceLogger.Log($"Merge files completed in {watch.Elapsed.TotalSeconds} seconds.", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"Merge files completed in {watch.Elapsed.TotalSeconds} seconds.", Enums.StatusSeverityType.Info);
             }
             catch (UnauthorizedAccessException ex1)
             {
@@ -184,7 +171,7 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"Failed to delete {fileName}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Failed to delete {fileName}: {ex.Message}", Enums.StatusSeverityType.Warn);
                 }
             }
         }
@@ -391,7 +378,7 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                     File.Create(file).Dispose();
                 }
                 TraceLogger.Log("Temporary combined lists cleared after committing to final locations.", Enums.StatusSeverityType.Debug);
-                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines", Enums.StatusSeverityType.Notice);
+                TraceLogger.Log($"Commit Complete: Difference between temporary and final combined lists: {tempCombinedList - finalCombinedList} lines", Enums.StatusSeverityType.Debug);
                 File.WriteAllLines(Paths.UpdateStatsLocation, [$"{tempCombinedList - finalCombinedList}"]);
             }
             catch (Exception ex)
@@ -429,7 +416,7 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                         long size = new FileInfo(BackupFiles[i]).Length;
                         if (size == 0)
                         {
-                            TraceLogger.Log($"Backup for {FilesToRevert[i]} is empty. Skipping revert.", Enums.StatusSeverityType.Warning);
+                            TraceLogger.Log($"Backup for {FilesToRevert[i]} is empty. Skipping revert.", Enums.StatusSeverityType.Warn);
                             continue;
                         }
                         string firstLine = File.ReadLines(BackupFiles[i]).First();
@@ -439,11 +426,11 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                             continue;
                         }
                         File.Move(BackupFiles[i], FilesToRevert[i], overwrite: true);
-                        TraceLogger.Log($"Reverted {FilesToRevert[i]} to previous version from {BackupFiles[i]}", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"Reverted {FilesToRevert[i]} to previous version from {BackupFiles[i]}", Enums.StatusSeverityType.Warn);
                     }
                     else
                     {
-                        TraceLogger.Log($"No backup found for {FilesToRevert[i]}. Cannot revert.", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"No backup found for {FilesToRevert[i]}. Cannot revert.", Enums.StatusSeverityType.Warn);
                     }
                 }
             }
@@ -476,25 +463,9 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
 
                 int max = userDefinedLines.Count;
 
-                //Create the ProgressBar
-                using (var pb = new ProgressBar() { Maximum = max })
+                string blockorwhite = isBlocklist ? "blocklist" : "whitelist";
+                ConsoleUI.Progress($"Merging user {blockorwhite}", max, "entries", progress =>
                 {
-                    if (TraceLogger.QuietMode)
-                    {
-                        pb.Text.Body.SetVisible(false);
-                    }
-                    //Clear "Description Text"
-                    pb.Text.Description.Clear();
-                    string blockorwhite = isBlocklist ? "blocklist" : "whitelist";
-                    //Setting "Description Text" when "Processing"
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Merging user defined {blockorwhite}: {pb.ElementName}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processed: {pb.Value}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
-
-                    //Setting "Description Text" when "Done"
-                    pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} elements in {pb.TimeProcessing.TotalSeconds}s.");
-
                     foreach (var rawLine in userDefinedLines)
                     {
                         string trimmed = rawLine.Trim();
@@ -519,9 +490,9 @@ namespace HostlistDownloaderCLI.Modules.WindowsSystem.IO
                         {
                             newEntries.Add(trimmed);
                         }
-                        pb.PerformStep(trimmed);
+                        progress.Advance(trimmed);
                     }
-                }
+                });
 
                 if (newEntries.Count != 0)
                 {

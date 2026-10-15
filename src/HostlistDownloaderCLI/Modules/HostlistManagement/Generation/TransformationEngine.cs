@@ -22,8 +22,7 @@
 
 using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
-using iluvadev.ConsoleProgressBar;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Diagnostics;
 using System.Net;
 
@@ -71,7 +70,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             if (!File.Exists(combinedFileLocation))
             {
-                TraceLogger.Log($"Combined file not found: {combinedFileLocation}", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Combined file not found: {combinedFileLocation}", Enums.StatusSeverityType.Warn);
                 return;
             }
 
@@ -84,16 +83,8 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             int max = originalLines.Length;
 
-            using (var pb = new ProgressBar() { Maximum = max })
+            ConsoleUI.Progress("Formatting lines", max, "lines", progress =>
             {
-                if (TraceLogger.QuietMode) pb.Text.Body.SetVisible(false);
-                pb.Text.Description.Clear();
-                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Formatting line: {pb.ElementName}");
-                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Lines remaining: {pb.Value}");
-                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
-                pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
-                pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} lines formatted in {pb.TimeProcessing.TotalSeconds}s.");
-
                 foreach (var line in originalLines)
                 {
                     if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#')) continue;
@@ -116,7 +107,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                         }
                         else
                         {
-                            TraceLogger.Log($"Malformed hosts entry (invalid/missing IP): '{trimmedLine}'. Formatting as domain-only.", Enums.StatusSeverityType.Warning);
+                            TraceLogger.Log($"Malformed hosts entry (invalid/missing IP): '{trimmedLine}'. Formatting as domain-only.", Enums.StatusSeverityType.Warn);
                             domainList = trimmedLine.Replace('\t', ' ').Trim();
                         }
                     }
@@ -190,9 +181,9 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                             formattedLines.Add(domainList);
                             break;
                     }
-                    pb.PerformStep(domainList);
+                    progress.Advance(domainList);
                 }
-            }
+            });
 
             try
             {
@@ -224,7 +215,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
                 if (!File.Exists(MergedFileLoc))
                 {
-                    TraceLogger.Log($"File not found: {MergedFileLoc}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"File not found: {MergedFileLoc}", Enums.StatusSeverityType.Warn);
                     return;
                 }
 
@@ -240,25 +231,8 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
                 int max = originalLines.Length;
 
-                //Create the ProgressBar
-                using (var pb = new ProgressBar() { Maximum = max })
+                ConsoleUI.Progress("Removing duplicates", max, "lines scanned", progress =>
                 {
-                    if (TraceLogger.QuietMode)
-                    {
-                        pb.Text.Body.SetVisible(false);
-                    }
-                    //Clear "Description Text"
-                    pb.Text.Description.Clear();
-
-                    //Setting "Description Text" when "Processing"
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Removing duplicates: {pb.ElementName}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Line count: {pb.Value}");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Processing time: {pb.TimeProcessing.TotalSeconds}s.");
-                    pb.Text.Description.Processing.AddNew().SetValue(pb => $"Estimated remaining time: {pb.TimeRemaining?.TotalSeconds}s.");
-
-                    //Setting "Description Text" when "Done"
-                    pb.Text.Description.Done.AddNew().SetValue(pb => $"{pb.Value} elements in {pb.TimeProcessing.TotalSeconds}s.");
-
                     foreach (var rawLine in originalLines)
                     {
                         // Trim leading/trailing whitespace (normalizes inconsistent source formatting)
@@ -276,9 +250,9 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                         {
                             cleanedLines.Add(line);
                         }
-                        pb.PerformStep(line);
+                        progress.Advance(line);
                     }
-                }
+                });
 
                 try
                 {

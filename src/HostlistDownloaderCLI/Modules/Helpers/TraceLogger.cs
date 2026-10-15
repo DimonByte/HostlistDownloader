@@ -21,11 +21,13 @@
 //SOFTWARE.
 
 using HostlistDownloader.Modules.WindowsSystem;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Spectre.Console;
 using System.Text;
 using static HostlistDownloaderCLI.Modules.Enums;
+using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
 
 namespace HostlistDownloaderCLI.Modules.Helpers
 {
@@ -45,7 +47,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
         {
             foreach (string file in Directory.GetFiles(_logDirectory))
             {
-                Console.WriteLine($"Deleting all logs. Currently deleting: {file}");
+                AnsiConsole.MarkupLine($"[yellow]Deleting log:[/] {Markup.Escape(file)}");
                 File.Delete(file);
             }
         }
@@ -66,7 +68,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
                     }
                     catch (InvalidOperationException)
                     {
-                        TraceLogger.Log("ConfigManager instance not initialized yet. Using default log expiry of 7 days.", StatusSeverityType.Warning);
+                        TraceLogger.Log("ConfigManager instance not initialized yet. Using default log expiry of 7 days.", StatusSeverityType.Warn);
                         // ConfigReader not initialised yet (e.g. very first run before settings.json exists) - use the 7 day default.
                     }
                     DateTime expiryDate = DateTime.Now.AddDays(-expiryDays);
@@ -89,13 +91,34 @@ namespace HostlistDownloaderCLI.Modules.Helpers
             }
         }
 
-        internal static void Log(string message, StatusSeverityType severity = StatusSeverityType.Information, int PassedErrorCode = 1,
+        /// <summary>
+        /// Pretty console output via Spectre.Console. The message is escaped so that URLs, brackets
+        /// and exception text can never be misinterpreted as markup. The log FILE format is unchanged.
+        /// </summary>
+        private static void WriteToConsole(StatusSeverityType severity, string message, string memberName, int lineNumber)
+        {
+            var (tag, tagStyle, messageStyle) = severity switch
+            {
+                StatusSeverityType.Debug => ("DEBUG", "grey", "grey"),
+                StatusSeverityType.Info => ("INFO", "white", "white"),
+                StatusSeverityType.Notice => ("NOTE", "green", "green"),
+                StatusSeverityType.Warn => ("WARN", "yellow", "yellow"),
+                StatusSeverityType.Error => ("ERROR", "red", "red"),
+                StatusSeverityType.Fatal => ("FATAL", "bold white on red", "bold red"),
+                _ => (severity.ToString().ToUpperInvariant(), "white", "white")
+            };
+
+            string origin = DebugMode ? $" [dim]{Markup.Escape($"{memberName}:{lineNumber}")}[/]" : string.Empty;
+            AnsiConsole.MarkupLine($"[dim]{DateTime.Now:HH:mm:ss}[/] [{tagStyle}]{tag,-5}[/]{origin} [{messageStyle}]{Markup.Escape(message ?? string.Empty)}[/]");
+        }
+
+        internal static void Log(string message, StatusSeverityType severity = StatusSeverityType.Info, int PassedErrorCode = 1,
                               [CallerMemberName] string memberName = "",
                               [CallerLineNumber] int lineNumber = 0)
         {
             if (string.IsNullOrEmpty(message))
             {
-                Log($"Class Malfunction Warning: The function {memberName} has called the TraceLogger.Log at line {lineNumber} but hasn't defined any of the log variables!", StatusSeverityType.Warning);
+                Log($"Class Malfunction Warning: The function {memberName} has called the TraceLogger.Log at line {lineNumber} but hasn't defined any of the log variables!", StatusSeverityType.Warn);
             }
 
             string logEntry = string.Empty;
@@ -121,6 +144,14 @@ namespace HostlistDownloaderCLI.Modules.Helpers
                 {
                     logEntry = $"[{timestamp}] [{severityText}] {message}";
                 }
+
+                if (HostlistOrchestrator.IsInDownloadingPhase)
+                {
+                    if (severity == StatusSeverityType.Warn)
+                    {
+                        HostlistOrchestrator.NumberOfWarningsDuringDownloadPhase++;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -129,30 +160,13 @@ namespace HostlistDownloaderCLI.Modules.Helpers
 
             // 1. Determine console output behavior explicitly
             bool suppressedByQuietMode = QuietMode;
-            bool suppressedByDebugMode = !DebugMode && severity == StatusSeverityType.Debug || severity == StatusSeverityType.Information;
+            bool suppressedByDebugMode = !DebugMode && severity == StatusSeverityType.Debug || severity == StatusSeverityType.Info;
             bool shouldPrintToConsole = !suppressedByQuietMode && !suppressedByDebugMode;
 
             // 2. Handle console output (if allowed)
             if (shouldPrintToConsole)
             {
-                ConsoleColor originalForeground = Console.ForegroundColor;
-                ConsoleColor originalBackground = Console.BackgroundColor;
-                try
-                {
-                    switch (severity)
-                    {
-                        case StatusSeverityType.Information: Console.ForegroundColor = ConsoleColor.White; break;
-                        case StatusSeverityType.Warning: Console.ForegroundColor = ConsoleColor.Yellow; break;
-                        case StatusSeverityType.Error: Console.ForegroundColor = ConsoleColor.Red; break;
-                        case StatusSeverityType.Fatal: Console.ForegroundColor = ConsoleColor.White; Console.BackgroundColor = ConsoleColor.Red; break;
-                    }
-                    Console.WriteLine(logEntry);
-                }
-                finally
-                {
-                    Console.ForegroundColor = originalForeground;
-                    Console.BackgroundColor = originalBackground;
-                }
+                WriteToConsole(severity, message, memberName, lineNumber);
             }
 
             lock (_lock)
@@ -169,7 +183,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
 
             if (severity == StatusSeverityType.Fatal)
             {
-                Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ErrorCodes.GetDescription(PassedErrorCode)}) - HostDirectory must exit. Trace Message: {logEntry}", StatusSeverityType.Error);
+                Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ErrorCodes.GetDescription(PassedErrorCode)}) - HostDirectory must exit.", StatusSeverityType.Error);
                 Environment.Exit(PassedErrorCode);
             }
         }

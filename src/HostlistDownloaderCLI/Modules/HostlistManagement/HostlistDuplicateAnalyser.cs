@@ -22,7 +22,7 @@
 
 using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 
 namespace HostlistDownloaderCLI.Modules.HostlistManagement
 {
@@ -80,7 +80,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
 
                 if (!allLists.ContainsKey(targetFileName))
                 {
-                    TraceLogger.Log($"Target file '{targetFileName}' not found in loaded lists.", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Target file '{targetFileName}' not found in loaded lists.", Enums.StatusSeverityType.Warn);
                     return;
                 }
                 if (!allLists.TryGetValue(targetFileName, out var targetLines))
@@ -145,7 +145,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
 
                     if (sourceRedundancyPercentage >= 100.0)
                     {
-                        TraceLogger.Log($"Redundant: '{sourceName}' is 100% redundant (contains no unique entries).", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"Redundant: '{sourceName}' is 100% redundant (contains no unique entries).", Enums.StatusSeverityType.Warn);
                         TraceLogger.Log($"   Consider removing '{sourceName}' as it is fully covered by '{targetFileName}'.", Enums.StatusSeverityType.Notice);
                     }
                     else
@@ -204,7 +204,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
 
                 if (allLists.Count < 2)
                 {
-                    TraceLogger.Log("Not enough hostlists found to perform duplicate comparison.", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log("Not enough hostlists found to perform duplicate comparison.", Enums.StatusSeverityType.Warn);
                     return;
                 }
 

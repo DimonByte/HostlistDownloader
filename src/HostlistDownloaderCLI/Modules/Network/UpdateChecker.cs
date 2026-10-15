@@ -34,7 +34,7 @@ namespace HostlistDownloader.Modules.Network
         private static readonly string OwnerRepo = "DimonByte/HostlistDownloader";
         internal static async Task BeginUpdateReplacement()
         {
-            TraceLogger.Log($"[UPDATE] Starting update replacement process...", Enums.StatusSeverityType.Information);
+            TraceLogger.Log($"[UPDATE] Starting update replacement process...", Enums.StatusSeverityType.Info);
 
             try
             {
@@ -71,7 +71,7 @@ namespace HostlistDownloader.Modules.Network
                     await response.Content.CopyToAsync(fileStream);
                 }
 
-                TraceLogger.Log("Download complete. Running PowerShell script to replace executable...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("Download complete. Running PowerShell script to replace executable...", Enums.StatusSeverityType.Info);
 
                 string psScript = $@"
                 # Wait 5 seconds then replace the executable
@@ -112,7 +112,7 @@ namespace HostlistDownloader.Modules.Network
                     CreateNoWindow = true
                 });
 
-                TraceLogger.Log("[UPDATE] PowerShell script started. Current process will now exit, please wait 5 seconds for update to complete...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("[UPDATE] PowerShell script started. Current process will now exit, please wait 5 seconds for update to complete...", Enums.StatusSeverityType.Info);
                 Environment.Exit(ErrorCodes.UpdateInProgress);
             }
             catch (Exception ex)

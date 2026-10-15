@@ -22,7 +22,7 @@
 
 using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -59,7 +59,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                     corruptionDetected
                         ? "Configuration corruption detected and cleaned. Please review logs."
                         : "Configuration validation passed. No issues found.",
-                    corruptionDetected ? Enums.StatusSeverityType.Warning : Enums.StatusSeverityType.Debug
+                    corruptionDetected ? Enums.StatusSeverityType.Warn : Enums.StatusSeverityType.Debug
                 );
             }
             catch (Exception ex)
@@ -123,7 +123,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                 else
                 {
                     corruptionDetected = true;
-                    TraceLogger.Log($"Removed invalid {contextName}: {url}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Removed invalid {contextName}: {url}", Enums.StatusSeverityType.Warn);
                 }
             }
 
@@ -168,7 +168,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                 else
                 {
                     corruptionDetected = true;
-                    TraceLogger.Log($"Removed invalid {contextName}: {domain}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Removed invalid {contextName}: {domain}", Enums.StatusSeverityType.Warn);
                 }
             }
 
@@ -208,7 +208,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
             string json = JsonSerializer.Serialize(newConfig, options);
             File.WriteAllText(Paths.SettingJsonFileLocation, json);
 
-            TraceLogger.Log("Configuration file has been updated with only valid entries.", Enums.StatusSeverityType.Information);
+            TraceLogger.Log("Configuration file has been updated with only valid entries.", Enums.StatusSeverityType.Info);
         }
 
         [GeneratedRegex(@"^(?:(?:xn--)?[a-z0-9]+(?:-+[a-z0-9]+)*\.)+[a-z]{2,}$", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-GB")]

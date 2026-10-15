@@ -23,7 +23,7 @@
 using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Text.Json;
 
 namespace HostlistDownloaderCLI.Modules.HostlistManagement
@@ -68,7 +68,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to read _sources.json in {listFolderLocation} ({ex.Message}). Treating all URLs as new.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Failed to read _sources.json in {listFolderLocation} ({ex.Message}). Treating all URLs as new.", Enums.StatusSeverityType.Warn);
                 addedUrls.AddRange(currentConfigUrls);
                 return (addedUrls, removedFileNames);
             }
@@ -131,7 +131,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
                     }
                     catch (Exception ex)
                     {
-                        TraceLogger.Log($"Failed to clean up orphaned file {fileName}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"Failed to clean up orphaned file {fileName}: {ex.Message}", Enums.StatusSeverityType.Warn);
                     }
                 }
             }
@@ -159,7 +159,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to read source manifest at {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Failed to read source manifest at {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warn);
                 return fileName; // Fallback to returning the file name
             }
         }

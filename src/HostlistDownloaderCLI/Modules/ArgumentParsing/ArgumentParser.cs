@@ -25,7 +25,7 @@ using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules.Helpers;
 using HostlistDownloaderCLI.Modules.HostlistManagement;
 using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 
 namespace HostlistDownloaderCLI.Modules.ArgumentParsing
 {
@@ -327,7 +327,7 @@ USER-DEFINED RULES:
             TraceLogger.Log($"Applying side effects based on parsed arguments... Argument Results: {result}", Enums.StatusSeverityType.Debug);
             if (result.StatsReport)
             {
-                TraceLogger.Log("/stats command detected. Generating stats report...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/stats command detected. Generating stats report...", Enums.StatusSeverityType.Info);
                 try
                 {
                     IOManager.GenerateStatsReport();
@@ -342,7 +342,7 @@ USER-DEFINED RULES:
 
             if (result.RevertLists)
             {
-                TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/revert command detected. Attempting to revert to previous hostlist version...", Enums.StatusSeverityType.Info);
                 try
                 {
                     IOManager.RevertCombinedListsToPreviousVersion();
@@ -355,13 +355,13 @@ USER-DEFINED RULES:
             }
             if (result.DiffMode)
             {
-                TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/diff command detected. Running diff analysis...", Enums.StatusSeverityType.Info);
                 try
                 {
                     var diffResult = File.ReadAllLines(Paths.UpdateStatsLocation);
                     if (diffResult.Length == 0)
                     {
-                        TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log("No previous run diff analysis results found.", Enums.StatusSeverityType.Warn);
                     }
                     //Check if diffResult is a number only
                     else if (diffResult.Length >= 1 && int.TryParse(diffResult[0], out int diffCount))
@@ -387,7 +387,7 @@ USER-DEFINED RULES:
 
             if (result.UpdateCheck)
             {
-                TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/update command detected. Checking for updates...", Enums.StatusSeverityType.Info);
                 try
                 {
                     if (UpdateChecker.IsUpdateAvailable())
@@ -428,7 +428,7 @@ USER-DEFINED RULES:
 
             if (result.CheckDuplicate)
             {
-                TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/dup command detected. Running duplicate analysis...", Enums.StatusSeverityType.Info);
                 try
                 {
                     HostlistDuplicateAnalyser.CheckDuplicationAcrossHostlists();
@@ -442,7 +442,7 @@ USER-DEFINED RULES:
 
             if (result.AnalyseDuplicateSource != null)
             {
-                TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Information);
+                TraceLogger.Log("/analysedup command detected. Analysing duplicates for source: " + result.AnalyseDuplicateSource, Enums.StatusSeverityType.Info);
                 try
                 {
                     HostlistDuplicateAnalyser.CheckDuplicationOnSpecificHostlist(result.AnalyseDuplicateSource);
@@ -457,13 +457,13 @@ USER-DEFINED RULES:
 
             if (result.GetSourceName != null)
             {
-                TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Information);
+                TraceLogger.Log($"/getsource command detected. Retrieving source: {result.GetSourceName}", Enums.StatusSeverityType.Info);
                 if (result.GetSourceName.Contains("..") ||
                     result.GetSourceName.Contains(Path.DirectorySeparatorChar) ||
                     result.GetSourceName.Contains(Path.AltDirectorySeparatorChar) ||
                     Path.IsPathRooted(result.GetSourceName))
                 {
-                    TraceLogger.Log($"Invalid source name containing path separators or traversal: '{result.GetSourceName}'", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Invalid source name containing path separators or traversal: '{result.GetSourceName}'", Enums.StatusSeverityType.Warn);
                     Environment.Exit(1);
                 }
                 try
@@ -472,7 +472,7 @@ USER-DEFINED RULES:
                     if (!File.Exists(Path.Combine(Paths.BlockListFolderLocation, result.GetSourceName)) &&
                         !File.Exists(Path.Combine(Paths.WhiteListFolderLocation, result.GetSourceName)))
                     {
-                        TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"Source file '{result.GetSourceName}' not found in blocklist or whitelist folders.", Enums.StatusSeverityType.Warn);
                         Environment.Exit(1);
                     }
                     else if (File.Exists(Path.Combine(Paths.BlockListFolderLocation, result.GetSourceName)))

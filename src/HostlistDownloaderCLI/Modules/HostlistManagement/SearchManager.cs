@@ -22,7 +22,7 @@
 
 using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -54,7 +54,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             domain = NormalizeDomain(domain);
             if (string.IsNullOrWhiteSpace(domain))
             {
-                TraceLogger.Log("No domain supplied to /search. Usage: HostlistDownloader /search example.com", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log("No domain supplied to /search. Usage: HostlistDownloader /search example.com", Enums.StatusSeverityType.Warn);
                 return;
             }
 
@@ -73,7 +73,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             else
             {
-                TraceLogger.Log("ConfigReader not initialized. Skipping user-defined lists.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log("ConfigReader not initialized. Skipping user-defined lists.", Enums.StatusSeverityType.Warn);
             }
 
             bool inFinalCombinedList = IsDomainInCompiledList(Paths.CombinedListFileLocation, domain);
@@ -85,7 +85,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             {
                 Console.WriteLine("No matching entries found in any configured blocklist or whitelist source.");
                 Console.WriteLine("This domain is not currently affected by any of your configured lists.");
-                TraceLogger.Log($"Search for '{domain}' found no matches in any source.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Search for '{domain}' found no matches in any source.", Enums.StatusSeverityType.Warn);
                 return;
             }
 
@@ -160,7 +160,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"Could not read {file} during search: {ex.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Could not read {file} during search: {ex.Message}", Enums.StatusSeverityType.Warn);
                     continue;
                 }
 
@@ -272,7 +272,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Could not read source manifest {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Could not read source manifest {manifestPath}: {ex.Message}", Enums.StatusSeverityType.Warn);
                 return [];
             }
         }

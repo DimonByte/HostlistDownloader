@@ -67,7 +67,7 @@ namespace HostlistDownloaderCLI.Modules.Network
             }
             catch (SocketException ex)
             {
-                TraceLogger.Log($"SSRF protection: DNS resolution failed for '{host}': {ex.Message}", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"SSRF protection: DNS resolution failed for '{host}': {ex.Message}", Enums.StatusSeverityType.Warn);
                 throw;
             }
 
@@ -81,7 +81,7 @@ namespace HostlistDownloaderCLI.Modules.Network
             {
                 if (URLSecurityValidator.IsInternalAddressSSRF(addr))
                 {
-                    TraceLogger.Log($"SSRF protection: DNS resolved '{host}' to prohibited internal/private IP {addr}. Skipping this address.", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"SSRF protection: DNS resolved '{host}' to prohibited internal/private IP {addr}. Skipping this address.", Enums.StatusSeverityType.Warn);
                     continue;
                 }
                 chosen = addr;
@@ -103,7 +103,7 @@ namespace HostlistDownloaderCLI.Modules.Network
             }
             catch
             {
-                TraceLogger.Log($"SSRF protection: Connection to {chosen}:{port} failed. Disposing socket.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"SSRF protection: Connection to {chosen}:{port} failed. Disposing socket.", Enums.StatusSeverityType.Warn);
                 socket.Dispose();
                 throw;
             }

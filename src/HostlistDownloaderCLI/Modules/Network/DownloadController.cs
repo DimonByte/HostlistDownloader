@@ -23,7 +23,7 @@
 using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules.Helpers;
 using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
-using HostlistDownloaderCLI.Modules.WindowsSystem.IO;
+using HostlistDownloaderCLI.Modules.IO;
 using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text;
@@ -169,7 +169,7 @@ namespace HostlistDownloaderCLI.Modules.Network
                             if (!File.Exists(normalizedLocalPath))
                             {
                                 // ETag is present but the actual host file was deleted.
-                                TraceLogger.Log($"{fileID} - {workingOnName} | ETag exists but host file is missing. Proceeding with download.", Enums.StatusSeverityType.Warning);
+                                TraceLogger.Log($"{fileID} - {workingOnName} | ETag exists but host file is missing. Proceeding with download.", Enums.StatusSeverityType.Warn);
                             }
                             else
                             {
@@ -185,12 +185,12 @@ namespace HostlistDownloaderCLI.Modules.Network
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | ETag check cancelled by user", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | ETag check cancelled by user", Enums.StatusSeverityType.Warn);
                     return DownloadOutcome.Cancelled;
                 }
                 catch (Exception ex)
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | Error checking online ETag, proceeding with download: {ex.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Error checking online ETag, proceeding with download: {ex.Message}", Enums.StatusSeverityType.Warn);
                 }
             }
             else
@@ -251,7 +251,7 @@ namespace HostlistDownloaderCLI.Modules.Network
                             return DownloadOutcome.PermanentFailure;
                         }
 
-                        TraceLogger.Log($"{fileID} - {workingOnName} | Attempt {attempt} failed with status {response.StatusCode}", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Attempt {attempt} failed with status {response.StatusCode}", Enums.StatusSeverityType.Warn);
 
                         if (attempt < MaxRetries)
                             await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
@@ -292,7 +292,7 @@ namespace HostlistDownloaderCLI.Modules.Network
 
                     if (contentBytes.Length == 0)
                     {
-                        TraceLogger.Log($"{fileID} - {workingOnName} | Server returned an empty body. Skipping write.", Enums.StatusSeverityType.Warning);
+                        TraceLogger.Log($"{fileID} - {workingOnName} | Server returned an empty body. Skipping write.", Enums.StatusSeverityType.Warn);
                         return DownloadOutcome.PermanentFailure;
                     }
 
@@ -356,7 +356,7 @@ namespace HostlistDownloaderCLI.Modules.Network
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | No ETag received from server. " +
                             $"This file will be re-downloaded on every sync.",
-                            Enums.StatusSeverityType.Warning);
+                            Enums.StatusSeverityType.Warn);
                     }
 
                     HostlistOrchestrator.HasDownloadedUpdates = true;
@@ -365,7 +365,7 @@ namespace HostlistDownloaderCLI.Modules.Network
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | Download cancelled by user", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Download cancelled by user", Enums.StatusSeverityType.Warn);
                     return DownloadOutcome.Cancelled;
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -376,12 +376,12 @@ namespace HostlistDownloaderCLI.Modules.Network
                 }
                 catch (HttpRequestException hre) when (hre.Message.Contains("SSRF"))
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | SSRF protection fault: possible attempt detected: {hre.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | SSRF protection fault: possible attempt detected: {hre.Message}", Enums.StatusSeverityType.Warn);
                     return DownloadOutcome.SecurityViolationDetected;
                 }
                 catch (HttpRequestException hre)
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | Network error on attempt {attempt}: {hre.Message}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | Network error on attempt {attempt}: {hre.Message}", Enums.StatusSeverityType.Warn);
                     if (attempt < MaxRetries)
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
                 }
@@ -428,7 +428,7 @@ namespace HostlistDownloaderCLI.Modules.Network
             }
             catch
             {
-                TraceLogger.Log($"Failed to extract file name from URL: {url}. Using fallback path.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"Failed to extract file name from URL: {url}. Using fallback path.", Enums.StatusSeverityType.Warn);
             }
             return Path.GetFileName(fallbackPath);
         }

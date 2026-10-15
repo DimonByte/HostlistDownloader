@@ -59,13 +59,13 @@ namespace HostlistDownloaderCLI.Modules.Network
                     return false;
                 if (!Uri.TryCreate(urlInstance, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
                 {
-                    TraceLogger.Log($"Invalid URL format in config instance: {urlInstance}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Invalid URL format in config instance: {urlInstance}", Enums.StatusSeverityType.Warn);
                     return false;
                 }
                 urlInstance = urlInstance.Trim();
                 if (urlInstance.Length == 0)
                 {
-                    TraceLogger.Log($"Empty URL in config instance: {urlInstance}", Enums.StatusSeverityType.Warning);
+                    TraceLogger.Log($"Empty URL in config instance: {urlInstance}", Enums.StatusSeverityType.Warn);
                     return false;
                 }
                 return true;
@@ -119,7 +119,7 @@ namespace HostlistDownloaderCLI.Modules.Network
             }
             catch (SocketException)
             {
-                TraceLogger.Log($"DNS resolution failed for {uri.DnsSafeHost}. Treating as internal to prevent SSRF.", Enums.StatusSeverityType.Warning);
+                TraceLogger.Log($"DNS resolution failed for {uri.DnsSafeHost}. Treating as internal to prevent SSRF.", Enums.StatusSeverityType.Warn);
                 return true;
             }
             TraceLogger.Log($"DNS resolution for {uri.DnsSafeHost} returned no internal/private IPs.", Enums.StatusSeverityType.Debug);
