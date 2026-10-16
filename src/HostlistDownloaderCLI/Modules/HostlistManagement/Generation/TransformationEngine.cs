@@ -83,7 +83,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             int max = originalLines.Length;
 
-            ConsoleUI.Progress("Formatting lines", max, "lines", progress =>
+            ConsoleUI.Progress($"Formatting lines to \"{formatType}\" format", max, "lines", progress =>
             {
                 foreach (var line in originalLines)
                 {
@@ -257,7 +257,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                 try
                 {
                     File.WriteAllLines(MergedFileLoc, cleanedLines);
-                    TraceLogger.Log($"Removed duplicates and empty lines. Saved {cleanedLines.Count:N0} unique lines to {MergedFileLoc}", Enums.StatusSeverityType.Notice);
+                    TraceLogger.Log($"Removed duplicates and empty lines. Saved {cleanedLines.Count:N0} unique lines to {MergedFileLoc}", Enums.StatusSeverityType.Info);
                 }
                 catch (Exception ex)
                 {
@@ -281,6 +281,8 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                 if (emptyRemoved > 0)
                     TraceLogger.Log($"  Empty/whitespace lines removed: {emptyRemoved:N0}");
                 TraceLogger.Log($"Lines before: {originalCount:N0} → after: {cleanedLines.Count:N0}");
+                //Params: watch.Elapsed.TotalSeconds, totalRemovedLines, sizeSavedDiff, dupRemoved, emptyRemoved
+                ConsoleUI.PrintDuplicateRemovalStats(watch.Elapsed.TotalSeconds, totalRemoved, sizeDiff, dupRemoved, emptyRemoved);
             }
             catch (Exception ex)
             {

@@ -7,7 +7,7 @@ $runtimes = @(
     "osx-arm64"
 )
 
-$baseName = "HostDownloader"
+$baseName = "HostDownloaderCLI"
 
 foreach ($rid in $runtimes) {
     Write-Host "--- Publishing for $rid ---" -ForegroundColor Cyan
@@ -16,7 +16,7 @@ foreach ($rid in $runtimes) {
     $customName = "$baseName-$rid"
 
     $dotnetArgs = @(
-        "publish",
+        "publish HostlistDownloader.slnx",
         "-c Release",
         "-f net10.0",
         "-r $rid",

@@ -113,7 +113,7 @@ namespace HostlistDownloaderCLI.Modules.IO
                 //ConsoleProgress.ShowOperationProgress(0, files.Length, "Merging files");
 
                 int max = files.Length;
-                ConsoleUI.Progress("Merging files", max, "files", progress =>
+                ConsoleUI.Progress("Merging stored hostfiles into combined list", max, "files", progress =>
                 {
                     foreach (var file in files)
                     {

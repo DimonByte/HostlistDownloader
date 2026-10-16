@@ -101,7 +101,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
             {
                 StatusSeverityType.Debug => ("DEBUG", "grey", "grey"),
                 StatusSeverityType.Info => ("INFO", "white", "white"),
-                StatusSeverityType.Notice => ("NOTE", "green", "green"),
+                StatusSeverityType.Notice => ("NOTE", "green", "grey"),
                 StatusSeverityType.Warn => ("WARN", "yellow", "yellow"),
                 StatusSeverityType.Error => ("ERROR", "red", "red"),
                 StatusSeverityType.Fatal => ("FATAL", "bold white on red", "bold red"),

@@ -109,4 +109,4 @@ Console.ForegroundColor = ConsoleColor.White;
 
 UpdateChecker.IsUpdateAvailable();
 
-TraceLogger.Log($"[END OF LOG]");
+TraceLogger.Log($"[PROGRAM CLOSED WITH CODE: {Environment.ExitCode}]", Enums.StatusSeverityType.Notice);

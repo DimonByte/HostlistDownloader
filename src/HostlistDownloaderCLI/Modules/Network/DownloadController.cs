@@ -38,6 +38,7 @@ namespace HostlistDownloaderCLI.Modules.Network
     public enum DownloadOutcome
     {
         Success,
+        SuccessWithNoETag,
         SkippedUpToDate,
         TransientFailure,
         PermanentFailure,
@@ -356,12 +357,19 @@ namespace HostlistDownloaderCLI.Modules.Network
                         TraceLogger.Log(
                             $"{fileID} - {workingOnName} | No ETag received from server. " +
                             $"This file will be re-downloaded on every sync.",
-                            Enums.StatusSeverityType.Warn);
+                            Enums.StatusSeverityType.Info);
                     }
 
                     HostlistOrchestrator.HasDownloadedUpdates = true;
                     TraceLogger.Log($"{fileID} - {workingOnName} | Download completed successfully ({finalContent.Length:N0} bytes).");
-                    return DownloadOutcome.Success;
+                    if (string.IsNullOrEmpty(newETag))
+                    {
+                        return DownloadOutcome.SuccessWithNoETag;
+                    }
+                    else
+                    {
+                        return DownloadOutcome.Success;
+                    }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {

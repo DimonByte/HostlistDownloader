@@ -24,15 +24,17 @@ using HostlistDownloader.Modules.WindowsSystem;
 using HostlistDownloaderCLI.Modules.Helpers;
 using HostlistDownloaderCLI.Modules.IO;
 using HostlistDownloaderCLI.Modules.Network;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 {
+
     public static class HostlistOrchestrator
     {
         internal static bool ProblemDuringUpdate;
         internal static bool HasDownloadedUpdates;
-        internal static List<(string Hostlist, string UpdateStatus, double DownloadTime)> UpdateStatistics = [];
+        internal static ConcurrentBag<(string Hostlist, string UpdateStatus, double DownloadTime)> UpdateStatistics = [];
         internal static string UpdateText = "";
         internal static bool hasUpdates = false;
         internal static int NumberOfWarningsDuringDownloadPhase = 0;
@@ -293,6 +295,10 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                                     UpdateStatistics.Add(($"{fileName}", "Downloaded", downloadTime.ElapsedMilliseconds));
                                     TraceLogger.Log($"{fileName} downloaded successfully.");
                                     break;
+                                case DownloadOutcome.SuccessWithNoETag:
+                                    UpdateStatistics.Add(($"{fileName}", "Downloaded (no ETag)", downloadTime.ElapsedMilliseconds));
+                                    TraceLogger.Log($"{fileName} downloaded successfully (no ETag detected, list will be re-downloaded on every sync regardless of any changes).");
+                                    break;
                                 case DownloadOutcome.SkippedUpToDate:
                                     //UpdateStatistics.Add($"{fileName} already up to date, skipped.");
                                     TraceLogger.Log($"{fileName} already up to date, skipped.");
@@ -381,17 +387,59 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
             // (handles renumbering after URL removals, e.g. "3-C.txt" > "2-C.txt")
             SourceManager.CleanupOrphanedFiles(ListFolderLocation, manifestForSerialization);
 
-            int succeeded = outcomes.Values.Count(o => o == DownloadOutcome.Success);
-            int upToDate = outcomes.Values.Count(o => o == DownloadOutcome.SkippedUpToDate);
-            int permanentFailures = outcomes.Values.Count(o => o == DownloadOutcome.PermanentFailure);
-            int transientFailures = outcomes.Values.Count(o => o == DownloadOutcome.TransientFailure);
+            int succeeded = 0;
+            int succeededWithNoETag = 0;
+            int upToDate = 0;
+            int permanentFailures = 0;
+            int transientFailures = 0;
+            int cancelled = 0;
+            int blockedByConfig = 0;
+            int contentRejected = 0;
+            int securityViolation = 0;
+            foreach (var outcome in outcomes.Values)
+            {
+                switch (outcome)
+                {
+                    case DownloadOutcome.Success:
+                        succeeded++;
+                        break;
+                    case DownloadOutcome.SuccessWithNoETag:
+                        succeededWithNoETag++;
+                        break;
+                    case DownloadOutcome.SkippedUpToDate:
+                        upToDate++;
+                        break;
+                    case DownloadOutcome.PermanentFailure:
+                        permanentFailures++;
+                        break;
+                    case DownloadOutcome.TransientFailure:
+                        transientFailures++;
+                        break;
+                    case DownloadOutcome.Cancelled:
+                        cancelled++;
+                        break;
+                    case DownloadOutcome.DownloadBlockedByConfig:
+                        blockedByConfig++;
+                        break;
+                    case DownloadOutcome.ContentRejectedNonText:
+                        contentRejected++;
+                        break;
+                    case DownloadOutcome.SecurityViolationDetected:
+                        securityViolation++;
+                        break;
+                    default:
+                        TraceLogger.Log($"Unexpected download outcome: {outcome}. This may indicate a bug.", Enums.StatusSeverityType.Error);
+                        break;
+                }
+            }
+
             //Add string to UpdateStatistics array on the next available index.
             string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
-            $"{succeeded} downloaded, {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
+                $"{succeeded} downloaded, {succeededWithNoETag} downloaded (no ETag), {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
+
             UpdateText = InternalUpdateStats;
-            // Goes to the log file only; the console gets the summary table instead.
             TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Info);
-            ConsoleUI.ShowDownloadSummary(watch.Elapsed, succeeded, upToDate, permanentFailures, transientFailures);
+            ConsoleUI.ShowDownloadSummary(watch.Elapsed, succeeded, succeededWithNoETag, upToDate, permanentFailures, transientFailures, cancelled, blockedByConfig, contentRejected, securityViolation);
 
             if (transientFailures > 0)
             {

@@ -11,7 +11,7 @@ foreach ($rid in $runtimes) {
     $customName = "$baseName-$rid"
 
     $dotnetArgs = @(
-        "publish",
+        "publish HostlistDownloader.slnx",
         "-c Release",
         "-f net10.0",
         "-r $rid",

@@ -21,9 +21,10 @@
 //SOFTWARE.
 
 using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
+using HostlistDownloaderCLI.Modules.IO;
 using Spectre.Console;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Net.Sockets;
 
 namespace HostlistDownloaderCLI.Modules.Helpers
 {
@@ -129,7 +130,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
             var sw = Stopwatch.StartNew();
             long completed = 0;
             AnsiConsole.Progress()
-                .AutoClear(false)
+                .AutoClear(true)
                 .HideCompleted(false)
                 .Columns(Columns())
                 .Start(ctx =>
@@ -157,7 +158,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
             var sw = Stopwatch.StartNew();
             long completed = 0;
             await AnsiConsole.Progress()
-                .AutoClear(false)
+                .AutoClear(true)
                 .HideCompleted(false)
                 .Columns(Columns())
                 .StartAsync(async ctx =>
@@ -182,7 +183,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
         //    AnsiConsole.Write(new Rule(title) { Justification = Justify.Left, Style = Style.Parse("grey") });
         //}
 
-        internal static void ShowDownloadSummary(TimeSpan elapsed, int succeeded, int upToDate, int permanentFailures, int transientFailures)
+        internal static void ShowDownloadSummary(TimeSpan elapsed, int succeeded, int succeededWithNoETag, int upToDate, int permanentFailures, int transientFailures, int cancelled, int downloadBlockedByConfig, int contentRejectedNonText, int securityViolation)
         {
             if (TraceLogger.QuietMode) return;
 
@@ -194,13 +195,18 @@ namespace HostlistDownloaderCLI.Modules.Helpers
                 .AddColumn(new TableColumn("Count").RightAligned());
 
             table.AddRow("[green]Downloaded[/]", succeeded.ToString("N0"));
+            table.AddRow("[green]Downloaded (no ETag)[/]", succeededWithNoETag.ToString("N0"));
             table.AddRow("[blue]Already up to date[/]", upToDate.ToString("N0"));
             table.AddRow(permanentFailures > 0 ? "[yellow]Permanently unreachable[/]" : "[grey]Permanently unreachable[/]", permanentFailures.ToString("N0"));
             table.AddRow(transientFailures > 0 ? "[red]Failed after retries[/]" : "[grey]Failed after retries[/]", transientFailures.ToString("N0"));
+            table.AddRow(cancelled > 0 ? "[yellow]Cancelled[/]" : "[grey]Cancelled[/]", cancelled.ToString("N0"));
+            table.AddRow(downloadBlockedByConfig > 0 ? "[yellow]Blocked by config (your settings is configured to block non HTTPS URLs)[/]" : "[grey]Blocked by config (HTTPS only)[/]", downloadBlockedByConfig.ToString("N0"));
+            table.AddRow(contentRejectedNonText > 0 ? "[yellow]Content rejected (non-text was received from the server)[/]" : "[grey]Content rejected (non-text)[/]", contentRejectedNonText.ToString("N0"));
+            table.AddRow(securityViolation > 0 ? "[red]SSRF Security Violation (A URL attempted to bypass security checks)[/]" : "[grey]SSRF Security Violation[/]", securityViolation.ToString("N0"));
             if (HostlistOrchestrator.NumberOfWarningsDuringDownloadPhase > 0)
             {
                 AnsiConsole.MarkupLine($"[yellow][bold]{HostlistOrchestrator.NumberOfWarningsDuringDownloadPhase:N0} warnings were logged during the download phase. Check the log for details.[/][/]");
-                table.AddRow("[yellow]Warnings[/]", HostlistOrchestrator.NumberOfWarningsDuringDownloadPhase.ToString("N0"));
+                table.AddRow("[yellow]Warnings reported during download[/]", HostlistOrchestrator.NumberOfWarningsDuringDownloadPhase.ToString("N0"));
             }
             AnsiConsole.Write(table);
         }
@@ -208,13 +214,12 @@ namespace HostlistDownloaderCLI.Modules.Helpers
         internal static void PrintUpdateStats(double watchTime)
         {
             if (TraceLogger.QuietMode) return;
-            AnsiConsole.MarkupLine($"[grey]Total hostlists updated: [cyan]{HostlistOrchestrator.UpdateStatistics.Count:N0}[/][/]");
             var table = new Table()
                 .Border(TableBorder.Rounded)
                 .BorderColor(Color.Grey)
                 .Title("[bold]Hostlist Update Statistics[/]")
-                .Caption($"[grey]Completed in {watchTime:F1}s[/]")
-                .AddColumn("Hostlist")
+                .Caption($"[green]Updated {HostlistOrchestrator.UpdateStatistics.Count:N0} hosts in {watchTime:F1}s[/]")
+                .AddColumn("Hostlist Name")
                 .AddColumn("Update Status")
                 .AddColumn("Download Time (in seconds)");
             foreach (var (hostlist, status, downloadTime) in HostlistOrchestrator.UpdateStatistics)
@@ -224,6 +229,27 @@ namespace HostlistDownloaderCLI.Modules.Helpers
             }
             AnsiConsole.Write(table);
             //HostlistOrchestrator uses internal static List<(string Hostlist, string UpdateStatus, double DownloadTime)> UpdateStatistics = [];
+        }
+        internal static void PrintDuplicateRemovalStats(double watchTime, int totalRemovedLines, long sizeSavedDiff, int duplicatesRemoved, int emptyRemoved)
+        {
+            if (TraceLogger.QuietMode) return;
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .BorderColor(Color.Grey)
+                .Title("[bold]Duplicate Removal Statistics[/]")
+                //.Caption($"[green]Removed {totalRemovedLines:N0} lines in {watchTime:F1}s[/]")
+                .AddColumn("Total Lines Removed")
+                .AddColumn("Size Saved Difference")
+                .AddColumn("Duplicates Removed")
+                .AddColumn("Empty Lines Removed")
+                .AddColumn("Processing Time (in seconds)");
+            table.AddRow(totalRemovedLines.ToString("N0"), IOManager.FormatBytes(sizeSavedDiff), duplicatesRemoved.ToString("N0"), emptyRemoved.ToString("N0"), watchTime.ToString("N2"));
+            AnsiConsole.Write(table);
+            //AnsiConsole.MarkupLine($"[green]Total Lines Removed from combined list:[/] [cyan]{totalRemovedLines:N0}[/]");
+            //AnsiConsole.MarkupLine($"[green]Size Saved Difference from combined list:[/] [cyan]{IOManager.FormatBytes(sizeSavedDiff)}[/]");
+            //AnsiConsole.MarkupLine($"[green]Duplicates Removed from combined list:[/] [cyan]{duplicatesRemoved:N0}[/]");
+            //AnsiConsole.MarkupLine($"[green]Empty Lines Removed from combined list:[/] [cyan]{emptyRemoved:N0}[/]");
+            //AnsiConsole.MarkupLine($"[green]Processing Time for removing duplicates:[/] [cyan]{watchTime:F2}s[/]");
         }
     }
 }
