@@ -498,10 +498,18 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
         /// <returns></returns>
         private static bool CompileSpecificList(string listFolderLocation, string combinedListLocation, int urlCount, int knownPermanentFailures, DateTime startTime)
         {
-            TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
-            IOManager.MergeFilesInDirectory(listFolderLocation, combinedListLocation);
-            TransformationEngine.BeginTransformation(combinedListLocation);
-            return HostlistIntegrityValidator.CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime, ProblemDuringUpdate, HasDownloadedUpdates);
+            if (HostlistIntegrityValidator.CheckIntegrity(listFolderLocation, urlCount, knownPermanentFailures, combinedListLocation, startTime, ProblemDuringUpdate, HasDownloadedUpdates))
+            {
+                TraceLogger.Log($"Compiling {Path.GetFileName(combinedListLocation)} list...");
+                IOManager.MergeFilesInDirectory(listFolderLocation, combinedListLocation);
+                TransformationEngine.BeginTransformation(combinedListLocation);
+                return true;
+            }
+            else
+            {
+                TraceLogger.Log($"Integrity check failed for {Path.GetFileName(combinedListLocation)}. Attempting automatic recovery.", Enums.StatusSeverityType.Warn);
+                return false;
+            }
         }
     }
 }

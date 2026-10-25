@@ -83,7 +83,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                 }
 
                 // Report findings
-                if (!issuesFound.Any())
+                if (issuesFound.Count == 0)
                 {
                     TraceLogger.Log("Configuration validation passed. No issues found.", Enums.StatusSeverityType.Notice);
                 }
