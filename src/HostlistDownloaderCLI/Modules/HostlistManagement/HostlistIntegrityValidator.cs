@@ -53,6 +53,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
                     TraceLogger.Log($"Successfully read _sources.json manifest. Enumerating expected source files...", Enums.StatusSeverityType.Debug);
                     foreach (var element in doc.RootElement.EnumerateObject())
                     {
+                        string fileName = element.Name;
                         if (!string.IsNullOrEmpty(fileName))
                         {
                             TraceLogger.Log($"Found expected source file in manifest: {fileName}", Enums.StatusSeverityType.Debug);
