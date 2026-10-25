@@ -1,4 +1,4 @@
-﻿//MIT License
+//MIT License
 
 //Copyright (c) 2026 Dimon
 
@@ -32,39 +32,91 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
     {
         internal static void CheckForInvalidConfig()
         {
+            ValidateConfig(fixMode: false, reportIssuesOnly: true);
+        }
+
+        /// <summary>
+        /// Validates configuration and optionally fixes issues found.
+        /// </summary>
+        /// <param name="fixMode">If true, automatically fix invalid entries.</param>
+        /// <param name="reportIssuesOnly">If true, report findings but don't exit on errors (for validation-only mode).</param>
+        internal static void ValidateConfig(bool fixMode, bool reportIssuesOnly = false)
+        {
             try
             {
+                // Always validate execution directory first
                 ValidateExecutionDirectory();
+
+                var issuesFound = new List<string>();
                 bool corruptionDetected = false;
+                
+                // Validate blocklists
                 var validBlocklists = ValidateAndFilterUrls(AppConfig.Instance.Blocklists, "blocklist", out bool blocklistCorruption);
                 corruptionDetected |= blocklistCorruption;
-                var validWhitelists = ValidateAndFilterUrls(AppConfig.Instance.Whitelist, "whitelist", out bool whitelistCorruption);
-                corruptionDetected |= whitelistCorruption;
-                var validUserBlockDomains = ValidateAndFilterDomains(AppConfig.Instance.UserWebsiteBlocklist, "user blocklist domain", out bool userBlockCorruption);
-                corruptionDetected |= userBlockCorruption;
-                var validUserWhiteDomains = ValidateAndFilterDomains(AppConfig.Instance.UserWebsiteWhitelist, "user whitelist domain", out bool userWhiteCorruption);
-                corruptionDetected |= userWhiteCorruption;
-
-                if (corruptionDetected)
+                if (validBlocklists.Count != AppConfig.Instance.Blocklists!.Count || blocklistCorruption)
                 {
-                    ApplyCorruptedConfigChanges(
-                        validBlocklists,
-                        validWhitelists,
-                        validUserBlockDomains,
-                        validUserWhiteDomains
-                    );
+                    issuesFound.Add($"Invalid blocklist entries found: {(AppConfig.Instance.Blocklists?.Count ?? 0) - validBlocklists.Count} invalid entry/entries removed.");
                 }
 
-                TraceLogger.Log(
-                    corruptionDetected
-                        ? "Configuration corruption detected and cleaned. Please review logs."
-                        : "Configuration validation passed. No issues found.",
-                    corruptionDetected ? Enums.StatusSeverityType.Warn : Enums.StatusSeverityType.Debug
-                );
+                // Validate whitelists
+                var validWhitelists = ValidateAndFilterUrls(AppConfig.Instance.Whitelist, "whitelist", out bool whitelistCorruption);
+                corruptionDetected |= whitelistCorruption;
+                if (validWhitelists.Count != AppConfig.Instance.Whitelist!.Count || whitelistCorruption)
+                {
+                    issuesFound.Add($"Invalid whitelist entries found: {(AppConfig.Instance.Whitelist?.Count ?? 0) - validWhitelists.Count} invalid entry/entries removed.");
+                }
+
+                // Validate user blocklist domains
+                var validUserBlockDomains = ValidateAndFilterDomains(AppConfig.Instance.UserWebsiteBlocklist, "user blocklist domain", out bool userBlockCorruption);
+                corruptionDetected |= userBlockCorruption;
+                if (validUserBlockDomains.Count != AppConfig.Instance.UserWebsiteBlocklist!.Count || userBlockCorruption)
+                {
+                    issuesFound.Add($"Invalid user blocklist domains found: {(AppConfig.Instance.UserWebsiteBlocklist?.Count ?? 0) - validUserBlockDomains.Count} invalid entry/entries removed.");
+                }
+
+                // Validate user whitelist domains
+                var validUserWhiteDomains = ValidateAndFilterDomains(AppConfig.Instance.UserWebsiteWhitelist, "user whitelist domain", out bool userWhiteCorruption);
+                corruptionDetected |= userWhiteCorruption;
+                if (validUserWhiteDomains.Count != AppConfig.Instance.UserWebsiteWhitelist!.Count || userWhiteCorruption)
+                {
+                    issuesFound.Add($"Invalid user whitelist domains found: {(AppConfig.Instance.UserWebsiteWhitelist?.Count ?? 0) - validUserWhiteDomains.Count} invalid entry/entries removed.");
+                }
+
+                // Report findings
+                if (!issuesFound.Any())
+                {
+                    TraceLogger.Log("Configuration validation passed. No issues found.", Enums.StatusSeverityType.Notice);
+                }
+                else
+                {
+                    bool willFix = fixMode || !reportIssuesOnly;
+                    
+                    if (willFix)
+                    {
+                        // Apply fixes by saving the cleaned configuration
+                        ApplyCorruptedConfigChanges(
+                            validBlocklists,
+                            validWhitelists,
+                            validUserBlockDomains,
+                            validUserWhiteDomains
+                        );
+                        TraceLogger.Log("Issues have been automatically fixed. Please review the logs for details.", Enums.StatusSeverityType.Notice);
+                    }
+                    else
+                    {
+                        // Only report, don't fix or exit
+                        foreach (var issue in issuesFound)
+                        {
+                            TraceLogger.Log(issue, Enums.StatusSeverityType.Warn);
+                        }
+                        TraceLogger.Log("Use /validate --fix to automatically fix these issues.", Enums.StatusSeverityType.Info);
+                    }
+                }
             }
             catch (Exception ex)
             {
                 TraceLogger.Log($"Critical failure during configuration check: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
+                if (!reportIssuesOnly) Environment.Exit(ErrorCodes.ConfigurationCorrupted);
             }
         }
 

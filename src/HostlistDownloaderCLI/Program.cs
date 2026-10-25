@@ -1,4 +1,4 @@
-﻿//MIT License
+//MIT License
 
 //Copyright (c) 2026 Dimon
 
@@ -57,6 +57,13 @@ catch (ArgumentException ex)
     TraceLogger.Log(ex.Message, Enums.StatusSeverityType.Error, ErrorCodes.InvalidConfigEntry);
     Environment.Exit(ErrorCodes.InvalidConfigEntry);
     return; //Although the environment exits, the return here prevents "Use of unassigned local variable 'argsResult'" error in solution error check.
+}
+
+if (argsResult.ValidateMode)
+{
+    // Validation was requested, run it and exit
+    AppConfigHealthChecker.ValidateConfig(argsResult.FixMode, !argsResult.FixMode);
+    return;
 }
 
 if (argsResult.SearchDomain != null)

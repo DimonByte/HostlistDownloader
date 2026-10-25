@@ -1,4 +1,4 @@
-﻿namespace HostlistDownloaderCLI.Modules.ArgumentParsing
+namespace HostlistDownloaderCLI.Modules.ArgumentParsing
 {
     public record ArgumentResult(
         bool IsQuiet,
@@ -23,6 +23,8 @@
         bool UpdateCheck,
         bool DiffMode,
         bool RevertLists,
-        bool StatsReport
+        bool StatsReport,
+        bool ValidateMode,
+        bool FixMode
     );
 }

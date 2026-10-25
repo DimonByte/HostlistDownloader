@@ -57,6 +57,11 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             TraceLogger.Log("Checking integrity of host files...");
             if (CheckURLandFileCount(new DirectoryInfo(ListFolderLocation), urlCount, knownPermanentFailures) == false)
             {
+                //Possible Issue Here:
+                //So the urlCount and knownPermanentFailures are used to calculate the expected number of files that should be present in the ListFolderLocation. If the actual number of files doesn't match this expected count, it indicates a potential integrity issue with the downloaded host files.
+                //But the problem is that if the hostlist sources haven't changed, and one of the sources is down, this will throw a mismatch error even though the files are still valid. So we need to consider that scenario and not treat it as a fatal error if the files are still valid.
+                //Say 9 out of 10 sources are reachable, it will expect 9 files 10-1 dead source, which will throw an error since it is expecting 10 from the config.
+                //So there needs to be a way to perhaps check if the file is there in cache and if it is, then we can warn the user but continue, instead of cancelling the entire process.
                 TraceLogger.Log($"Integrity check failed due to URL and file count mismatch. Please check the logs for details.", Enums.StatusSeverityType.Error);
                 return false;
             }

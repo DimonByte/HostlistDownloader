@@ -1,4 +1,4 @@
-﻿//MIT License
+//MIT License
 
 //Copyright (c) 2026 Dimon
 
@@ -27,6 +27,9 @@ using HostlistDownloaderCLI.Modules.HostlistManagement;
 using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
 using HostlistDownloaderCLI.Modules.IO;
 
+// Alias for cross-assembly reference to AppConfigHealthChecker
+using WindowsSystemConfig = HostlistDownloader.Modules.WindowsSystem.Config;
+
 namespace HostlistDownloaderCLI.Modules.ArgumentParsing
 {
     /// <summary>
@@ -50,10 +53,11 @@ GLOBAL ARGUMENTS:
   /dupanalyse <source>, /analysedup <source>  Analyze duplicate entries.
   /getsource <source>, /gs <source>            Retrieve source name from filename.
   /merge, /regenerate, /re  Consolidate hostlists and user rules locally (offline).
-  /update                    Check for application updates.
-  /diff                      Show differences from the previous hostlist version.
-  /revert                    Revert to the previous hostlist version.
+  /update                   Check for application updates.
+  /diff                     Show differences from the previous hostlist version.
+  /revert                   Revert to the previous hostlist version.
   /stats                    Generate a statistics report of the last run.
+  /validate [--fix]         Validate configuration and optionally fix issues.
 
 HOSTLIST MANAGEMENT:
   /addblocklist <url>, /ab  Add a new blocklist source.
@@ -100,6 +104,8 @@ USER-DEFINED RULES:
             bool diffMode = false;
             bool revertLists = false;
             bool statsReport = false;
+            bool validateMode = false;
+            bool fixMode = false;
             List<string> remainingArgs = [];
 
             TraceLogger.Log("Starting argument parsing...", Enums.StatusSeverityType.Debug);
@@ -217,6 +223,26 @@ USER-DEFINED RULES:
                     showHelp = true;
                 }
 
+                // Handle /validate
+                if (arg.Equals("/validate", StringComparison.OrdinalIgnoreCase))
+                {
+                    anyMatched = true;
+                    validateMode = true;
+
+                    // Check for --fix flag in remaining args or next arg
+                    if (i + 1 < args.Length)
+                    {
+                        string nextArg = args[i + 1].Length > MaxArgumentLength
+                            ? throw new ArgumentException($"Argument value for {arg} exceeds maximum length of {MaxArgumentLength}.")
+                            : args[i + 1];
+
+                        if (nextArg.Equals("--fix", StringComparison.OrdinalIgnoreCase))
+                        {
+                            fixMode = true;
+                        }
+                    }
+                }
+
                 // Add Blocklist
                 if (arg.Equals("/addblocklist", StringComparison.OrdinalIgnoreCase) ||
                          arg.Equals("/ab", StringComparison.OrdinalIgnoreCase))
@@ -310,7 +336,9 @@ USER-DEFINED RULES:
                 UpdateCheck: updateCheck,
                 DiffMode: diffMode,
                 RevertLists: revertLists,
-                StatsReport: statsReport
+                StatsReport: statsReport,
+                ValidateMode: validateMode,
+                FixMode: fixMode
             );
         }
         private static void PrintHelp()
@@ -423,6 +451,13 @@ USER-DEFINED RULES:
             if (result.ShowHelp)
             {
                 PrintHelp();
+                Environment.Exit(0);
+            }
+
+            if (result.ValidateMode)
+            {
+                TraceLogger.Log("Running configuration validation...", Enums.StatusSeverityType.Notice);
+                WindowsSystemConfig.AppConfigHealthChecker.ValidateConfig(result.FixMode, !result.FixMode);
                 Environment.Exit(0);
             }
 
