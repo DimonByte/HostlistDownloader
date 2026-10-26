@@ -24,7 +24,7 @@
 
 namespace HostlistDownloaderCLI.Modules
 {
-    public static class ErrorCodes
+    public static class ExceptionHandler
     {
 
         // General errors
@@ -70,6 +70,11 @@ namespace HostlistDownloaderCLI.Modules
                 UpdateInProgress => "Update is currently in progress",
                 _ => "Unknown error occurred"
             };
+        }
+        public class SSRFProtectionException : Exception
+        {
+            public SSRFProtectionException(string message) : base(message) { }
+            public SSRFProtectionException(string message, Exception innerException) : base(message, innerException) { }
         }
     }
 }

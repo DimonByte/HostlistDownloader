@@ -115,8 +115,8 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Critical failure during configuration check: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
-                if (!reportIssuesOnly) Environment.Exit(ErrorCodes.ConfigurationCorrupted);
+                TraceLogger.Log($"Critical failure during configuration check: {ex}", Enums.StatusSeverityType.Fatal, ExceptionHandler.ConfigurationCorrupted);
+                if (!reportIssuesOnly) Environment.Exit(ExceptionHandler.ConfigurationCorrupted);
             }
         }
 
@@ -138,7 +138,7 @@ namespace HostlistDownloader.Modules.WindowsSystem.Config
                     $"Application Path: {appDir} - Current Path: {currentDir}. " +
                     $"To fix this, CD to '{appDir}' in your terminal.",
                     Enums.StatusSeverityType.Fatal,
-                    ErrorCodes.WrongExecutionDirectory
+                    ExceptionHandler.WrongExecutionDirectory
                 );
             }
         }

@@ -36,10 +36,10 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
         /// <param name="combinedFileLocation"></param>
         internal static void BeginTransformation(string combinedFileLocation) //Cool name.
         {
-            TraceLogger.Log("Starting Transformation...");
-            RemoveDuplicates(combinedFileLocation);
             TraceLogger.Log("Formatting hosts...");
             FormatHosts(combinedFileLocation);
+            TraceLogger.Log("Removing Duplicate Entries...");
+            RemoveDuplicates(combinedFileLocation);
             TraceLogger.Log("Transformation complete.");
         }
 
@@ -149,10 +149,10 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                             break;
 
                         case "ublockorigin":
-                        case "uBlock":
-                        case "uBlock Origin":
+                        case "ublock":
+                        case "ublock origin":
                         case "ad-guard":
-                        case "AdGuard":
+                        case "adguard":
                             if (isWildcard)
                             {
                                 formattedLines.Add(domainList);

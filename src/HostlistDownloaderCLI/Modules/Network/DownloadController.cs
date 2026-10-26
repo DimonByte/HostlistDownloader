@@ -89,13 +89,6 @@ namespace HostlistDownloaderCLI.Modules.Network
                 return DownloadOutcome.PermanentFailure;
             }
 
-            // The real protection is SSRFProtectedHttpHandler's ConnectCallback on httpClient, which resolves once and connects directly to the vetted address for the actual request.
-            if (await URLSecurityValidator.IsInternalAddressDNS(uri))
-            {
-                TraceLogger.Log($"{fileID} - {workingOnName} | SSRF Protection Fault: URL resolves to a prohibited internal/private IP address: {uri.DnsSafeHost}. Aborting.", Enums.StatusSeverityType.Error);
-                return DownloadOutcome.PermanentFailure;
-            }
-
             if (url.Length > MaxUrlLength)
             {
                 TraceLogger.Log($"{fileID} - {workingOnName} | URL exceeds maximum length of {MaxUrlLength} characters: {url}", Enums.StatusSeverityType.Error);
@@ -382,9 +375,9 @@ namespace HostlistDownloaderCLI.Modules.Network
                     if (attempt < MaxRetries)
                         await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
                 }
-                catch (HttpRequestException hre) when (hre.Message.Contains("SSRF"))
+                catch (ExceptionHandler.SSRFProtectionException)
                 {
-                    TraceLogger.Log($"{fileID} - {workingOnName} | SSRF protection fault: possible attempt detected: {hre.Message}", Enums.StatusSeverityType.Warn);
+                    TraceLogger.Log($"{fileID} - {workingOnName} | SSRF protection fault: possible attempt detected", Enums.StatusSeverityType.Warn);
                     return DownloadOutcome.SecurityViolationDetected;
                 }
                 catch (HttpRequestException hre)

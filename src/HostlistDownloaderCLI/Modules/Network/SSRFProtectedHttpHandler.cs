@@ -43,17 +43,16 @@ namespace HostlistDownloaderCLI.Modules.Network
             TraceLogger.Log("SSRF protection: Creating SSRF-protected SocketsHttpHandler...", Enums.StatusSeverityType.Debug);
             return new SocketsHttpHandler
             {
+                UseProxy = false,
                 ConnectCallback = ConnectAsync
             };
         }
 
         /// <summary>
-        /// This callback is invoked by SocketsHttpHandler for each outbound connection. It resolves the hostname to IP addresses, filters out any internal/private addresses, and connects to the first public IP found. If no public IPs are available, it throws an exception to prevent SSRF attacks.
+        /// This callback is invoked by SocketsHttpHandler for each outbound connection. It resolves the hostname to IP addresses, 
+        /// filters out any internal/private addresses, and connects to the first public IP found. 
+        /// If connection fails, it falls back to the next allowed address. If no public IPs are available, it throws an exception.
         /// </summary>
-        /// <param name="context"></param>
-        /// <param name="cancellationToken"></param>
-        /// <returns></returns>
-        /// <exception cref="HttpRequestException"></exception>
         private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
         {
             string host = context.DnsEndPoint.Host;
@@ -73,40 +72,48 @@ namespace HostlistDownloaderCLI.Modules.Network
 
             if (addresses.Length == 0)
             {
-                throw new HttpRequestException($"DNS resolution for '{host}' returned no addresses.");
+                throw new ExceptionHandler.SSRFProtectionException($"DNS resolution for '{host}' returned no addresses.");
             }
 
-            IPAddress? chosen = null;
-            foreach (var addr in addresses)
+            // Filter out internal/private IPs using the hardened validator
+            var allowedAddresses = addresses.Where(addr => !URLSecurityValidator.IsInternalAddressSSRF(addr)).ToList();
+
+            if (allowedAddresses.Count == 0)
             {
-                if (URLSecurityValidator.IsInternalAddressSSRF(addr))
+                throw new ExceptionHandler.SSRFProtectionException($"SSRF protection: '{host}' resolved only to internal/private IP address(es). Aborting connection.");
+            }
+
+            //Prefer IPv4 for reliability on dual-stack hosts with broken IPv6
+            allowedAddresses.Sort((a, b) => a.AddressFamily.CompareTo(b.AddressFamily));
+
+            Exception lastException = null;
+            foreach (var addr in allowedAddresses)
+            {
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
                 {
-                    TraceLogger.Log($"SSRF protection: DNS resolved '{host}' to prohibited internal/private IP {addr}. Skipping this address.", Enums.StatusSeverityType.Warn);
-                    continue;
+                    TraceLogger.Log($"SSRF protection: Connecting to {addr}:{port}...", Enums.StatusSeverityType.Debug);
+                    await socket.ConnectAsync(addr, port, cancellationToken).ConfigureAwait(false);
+                    TraceLogger.Log($"SSRF protection: Connected to {addr}:{port}.", Enums.StatusSeverityType.Debug);
+                    return new NetworkStream(socket, ownsSocket: true);
                 }
-                chosen = addr;
-                break;
+                catch (Exception ex)
+                {
+                    // Don't swallow cancellation tokens
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+
+                    TraceLogger.Log($"SSRF protection: Connection to {addr}:{port} failed. Disposing socket and trying next address.", Enums.StatusSeverityType.Warn);
+                    socket.Dispose();
+                    lastException = ex;
+                }
             }
 
-            if (chosen == null)
-            {
-                throw new HttpRequestException($"SSRF protection: '{host}' resolved only to internal/private IP address(es). Aborting connection.");
-            }
-            TraceLogger.Log($"SSRF protection: DNS resolved '{host}' to public IP {chosen}. Proceeding with connection.", Enums.StatusSeverityType.Debug);
-            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try
-            {
-                TraceLogger.Log($"SSRF protection: Connecting to {chosen}:{port}...", Enums.StatusSeverityType.Debug);
-                await socket.ConnectAsync(chosen, port, cancellationToken).ConfigureAwait(false);
-                TraceLogger.Log($"SSRF protection: Connected to {chosen}:{port}.", Enums.StatusSeverityType.Debug);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch
-            {
-                TraceLogger.Log($"SSRF protection: Connection to {chosen}:{port} failed. Disposing socket.", Enums.StatusSeverityType.Warn);
-                socket.Dispose();
-                throw;
-            }
+            // Throw dedicated exception with fallback context instead of generic HttpRequestException
+            throw new ExceptionHandler.SSRFProtectionException($"SSRF protection: All allowed addresses for '{host}' failed to connect. Last error: {lastException?.Message}", lastException);
         }
     }
 }

@@ -43,6 +43,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
         /// <item><description><b>removedFileNames</b> – File names from the previous manifest whose URLs are no longer in config (files to delete).</description></item>
         /// </list>
         /// </returns>
+        /// TODO: ReconcileSources compares URLs case-insensitively. Paths on GitHub raw and similar hosts are case-sensitive. It is also O(n·m) via .Any(...); use a HashSet.
         internal static (List<string> addedUrls, List<string> removedFileNames) ReconcileSources(
             string listFolderLocation,
             IReadOnlyList<string> currentConfigUrls)
@@ -63,7 +64,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             try
             {
                 var json = File.ReadAllText(manifestPath);
-                previousSources = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                previousSources = JsonSerializer.Deserialize(
                     json, ManifestJsonSerializerContext.Default.DictionaryStringString) ?? [];
             }
             catch (Exception ex)
@@ -106,6 +107,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
         /// in the folder that are no longer referenced by the manifest. This handles the case
         /// where file numbering shifts after a URL removal (e.g. "3-C.txt" becomes "2-C.txt").
         /// </summary>
+        /// TODO: CleanupOrphanedFiles deletes anything not in the manifest. If a source fails temporarily and the manifest only lists this run’s successes, its cached copy is deleted when you need it most.
         internal static void CleanupOrphanedFiles(string listFolderLocation, Dictionary<string, string> validSources)
         {
             TraceLogger.Log($"Cleaning up orphaned files in {listFolderLocation} based on current _sources.json.", Enums.StatusSeverityType.Debug);
@@ -116,9 +118,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
                 var fileName = Path.GetFileName(file);
 
                 // Skip non-list files
-                if (fileName.EndsWith(".etag", StringComparison.OrdinalIgnoreCase)) continue;
-                if (fileName.Equals("_sources.json", StringComparison.OrdinalIgnoreCase)) continue;
-                if (fileName.Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase)) continue;
+                if (IOManager.IsInternalFile(fileName)) continue;
 
                 if (!validFileNames.Contains(fileName))
                 {
@@ -143,7 +143,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             string manifestPath = Path.Combine(isBlockList ? Paths.BlockListFolderLocation : Paths.WhiteListFolderLocation, "_sources.json");
             if (!File.Exists(manifestPath))
             {
-                TraceLogger.Log($"Source manifest not found at {manifestPath}.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
+                TraceLogger.Log($"Source manifest not found at {manifestPath}.", Enums.StatusSeverityType.Fatal, ExceptionHandler.FileMissing);
             }
 
             try

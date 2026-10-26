@@ -20,8 +20,8 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
-using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
+using HostlistDownloaderCLI.Modules.IO;
 using System.Text.Json;
 
 namespace HostlistDownloaderCLI.Modules.HostlistManagement
@@ -68,18 +68,21 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             }
 
             IEnumerable<string> files = Directory.GetFiles(listFolder.FullName, "*")
-                .Where(f => !Path.GetFullPath(f).EndsWith(".etag", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFullPath(f).Contains("HLDcombined-", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFileName(f).Equals("_sources.json", StringComparison.OrdinalIgnoreCase));
+                .Where(f => IOManager.IsInternalFile(Path.GetFileName(f)));
 
             int fileCount = files.Count();
             int expectedCount = urlCount - knownPermanentFailures;
 
             // Build a set of files that currently exist (excluding internal files)
             var existingFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            TraceLogger.Log($"Enumerating existing files in {listFolder.FullName} (excluding .etag, HLDcombined-*, and _sources.json)...", Enums.StatusSeverityType.Debug);
+            TraceLogger.Log($"Enumerating existing files in {listFolder.FullName} (excluding internal files)...", Enums.StatusSeverityType.Debug);
             foreach (var f in files)
             {
+                if (f.Contains("sources.json"))
+                {
+                    TraceLogger.Log($"Skipping internal file: {Path.GetFileName(f)}", Enums.StatusSeverityType.Debug);
+                    continue;
+                }
                 TraceLogger.Log($"Found existing file: {Path.GetFileName(f)}", Enums.StatusSeverityType.Debug);
                 existingFiles.Add(Path.GetFileName(f));
             }
@@ -94,7 +97,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
                     string filePath = Path.Combine(listFolder.FullName, expectedFile);
                     TraceLogger.Log($"Checking for expected file: {expectedFile}", Enums.StatusSeverityType.Debug);
 
-                    if (!existingFiles.Contains(expectedFile))
+                    if (!existingFiles.Contains(expectedFile.ToLower()))
                     {
                         // File doesn't exist and wasn't properly cached - this is a true problem
                         TraceLogger.Log($"ERROR: Missing expected file '{expectedFile}' from previous download. This indicates an integrity issue.", Enums.StatusSeverityType.Error);
@@ -120,22 +123,35 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement
             }
 
             TraceLogger.Log("Checking if combined list has been written to during update...", Enums.StatusSeverityType.Debug);
-            if (new FileInfo(CombinedListLocation).Length > 0)
+            try
             {
-                TraceLogger.Log($"{CombinedListLocation} has valid file size.", Enums.StatusSeverityType.Debug);
-                if (!ProblemDuringUpdate && HasDownloadedUpdates)
+                if (new FileInfo(CombinedListLocation).Length > 0)
                 {
-                    DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
-                    if (lastWriteTime < startTime)
+                    TraceLogger.Log($"{CombinedListLocation} has valid file size.", Enums.StatusSeverityType.Debug);
+                    if (!ProblemDuringUpdate && HasDownloadedUpdates)
                     {
-                        TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.", Enums.StatusSeverityType.Error);
-                        return false;
+                        DateTime lastWriteTime = File.GetLastWriteTime(CombinedListLocation);
+                        if (lastWriteTime < startTime)
+                        {
+                            TraceLogger.Log($"Integrity check failure (Internal Status Check Mismatch): {CombinedListLocation} hasn't been written to during the update process but the DownloadManager has reported that it downloaded updates. Last write time: {lastWriteTime}, Update start time: {startTime}.", Enums.StatusSeverityType.Error);
+                            return false;
+                        }
+                    }
+                    else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
+                    {
+                        TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.", Enums.StatusSeverityType.Debug);
                     }
                 }
-                else if (!ProblemDuringUpdate && !HasDownloadedUpdates)
-                {
-                    TraceLogger.Log($"Skipping date written check on combined list since no updates were downloaded.", Enums.StatusSeverityType.Debug);
-                }
+            }
+            catch (FileNotFoundException ex1)
+            {
+                TraceLogger.Log($"Integrity check failure: {CombinedListLocation} does not exist {ex1.Message}.", Enums.StatusSeverityType.Error);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Error while checking combined list file: {ex.Message}", Enums.StatusSeverityType.Error);
+                return false;
             }
 
             TraceLogger.Log("Integrity check complete. No issues detected.");

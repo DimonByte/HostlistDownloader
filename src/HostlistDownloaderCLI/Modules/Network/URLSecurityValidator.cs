@@ -30,7 +30,6 @@ namespace HostlistDownloaderCLI.Modules.Network
 {
     internal class URLSecurityValidator
     {
-
         private static readonly string[] HtmlSignatures =
         [
             "<html",
@@ -73,89 +72,62 @@ namespace HostlistDownloaderCLI.Modules.Network
             catch (Exception ex)
             {
                 HostlistOrchestrator.ProblemDuringUpdate = true;
-                TraceLogger.Log($"Error validating URL {urlInstance} in config instance: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.InvalidConfigEntry);
+                TraceLogger.Log($"Error validating URL {urlInstance} in config instance: {ex}", Enums.StatusSeverityType.Fatal, ExceptionHandler.InvalidConfigEntry);
                 return false;
             }
         }
 
         /// <summary>
-        ///Prevents SSRF by resolving the host via DNS and checking if any resulting IP is in a private, loopback, or link-local range.
-        /// </summary>
-        internal static async Task<bool> IsInternalAddressDNS(Uri uri)
-        {
-            try
-            {
-                IPAddress[] addresses = await Dns.GetHostAddressesAsync(uri.DnsSafeHost).ConfigureAwait(false);
-                foreach (var addr in addresses)
-                {
-                    if (addr.Equals(IPAddress.Loopback)) return true;
-
-                    if (addr.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        byte[] bytes = addr.GetAddressBytes();
-
-                        //IPv4 Loopback range (127.0.0.0/8)
-                        //(e.g., 127.0.0.2)
-                        if (bytes[0] == 127) return true;
-
-                        //IPv4 Link-Local (169.254.0.0/16)
-                        if (bytes[0] == 169 && bytes[1] == 254) return true;
-                        //10.0.0.0/8
-                        if (bytes[0] == 10) return true;
-                        //172.16.0.0/12 (172.16.x.x through 172.31.x.x)
-                        if (bytes[0] == 172 && (bytes[1] >= 16 && bytes[1] <= 31)) return true;
-                        //192.168.0.0/16
-                        if (bytes[0] == 192 && bytes[1] == 168) return true;
-                    }
-                    else if (addr.AddressFamily == AddressFamily.InterNetworkV6)
-                    {
-                        //IPv6 Link-Local (fe80::/10)
-                        if (addr.IsIPv6LinkLocal) return true;
-                        //IPv6 Unique Local Address (fc00::/7)
-                        byte[] v6Bytes = addr.GetAddressBytes();
-                        if (v6Bytes[0] == 0xfc || v6Bytes[0] == 0xfd) return true;
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                TraceLogger.Log($"DNS resolution failed for {uri.DnsSafeHost}. Treating as internal to prevent SSRF.", Enums.StatusSeverityType.Warn);
-                return true;
-            }
-            TraceLogger.Log($"DNS resolution for {uri.DnsSafeHost} returned no internal/private IPs.", Enums.StatusSeverityType.Debug);
-            return false;
-        }
-
-        /// <summary>
-        /// Returns true if the given address is in a private, loopback, or link-local range. Used for SSRF protection class.
+        /// Returns true if the given address is in a private, loopback, or link-local range. Used for SSRF protection.
         /// </summary>
         internal static bool IsInternalAddressSSRF(IPAddress address)
         {
+            // Handle IPv4-mapped IPv6 (::ffff:x.x.x.x) by mapping to IPv4 first
+            if (address.AddressFamily == AddressFamily.InterNetworkV6 && address.IsIPv4MappedToIPv6)
+            {
+                address = address.MapToIPv4();
+            }
+
             if (address.Equals(IPAddress.Loopback) || address.Equals(IPAddress.IPv6Loopback))
+                return true;
+
+            // Block unspecified address (::)
+            if (address.Equals(IPAddress.IPv6None))
                 return true;
 
             if (address.AddressFamily == AddressFamily.InterNetwork)
             {
                 byte[] bytes = address.GetAddressBytes();
+                byte first = bytes[0];
 
+                // Block 0.0.0.0/8 (reaches localhost on Linux/macOS)
+                if (first == 0) return true;
                 // 127.0.0.0/8
-                if (bytes[0] == 127) return true;
-                // 169.254.0.0/16 (link-local - crucial for cloud metadata endpoints)
-                if (bytes[0] == 169 && bytes[1] == 254) return true;
+                if (first == 127) return true;
+                // Block 100.64.0.0/10 (CGNAT, e.g., Alibaba metadata endpoint)
+                if (first == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
+                // 169.254.0.0/16 (link-local)
+                if (first == 169 && bytes[1] == 254) return true;
                 // 10.0.0.0/8
-                if (bytes[0] == 10) return true;
+                if (first == 10) return true;
                 // 172.16.0.0/12
-                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+                if (first == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
                 // 192.168.0.0/16
-                if (bytes[0] == 192 && bytes[1] == 168) return true;
+                if (first == 192 && bytes[1] == 168) return true;
+                // Block Multicast (224.0.0.0/4), Reserved (240.0.0.0/4), and Broadcast (255.255.255.255)
+                if (first >= 224) return true;
             }
             else if (address.AddressFamily == AddressFamily.InterNetworkV6)
             {
-                // fe80::/10
+                // fe80::/10 (Link-local)
                 if (address.IsIPv6LinkLocal) return true;
-                // fc00::/7 (unique local)
+                // fc00::/7 (Unique Local Address)
                 byte[] v6Bytes = address.GetAddressBytes();
                 if (v6Bytes[0] == 0xfc || v6Bytes[0] == 0xfd) return true;
+                // Block IPv6 Multicast (ff00::/8)
+                if (address.IsIPv6Multicast) return true;
+                // Block IPv6 Site-local (fec0::/10, deprecated but should be blocked)
+                if (v6Bytes[0] == 0xfe && v6Bytes[1] >= 0xc0) return true;
             }
 
             return false;
@@ -168,16 +140,21 @@ namespace HostlistDownloaderCLI.Modules.Network
         internal static bool IsPlainTextContent(byte[] content)
         {
             if (content == null || content.Length == 0)
-                return true; // Empty/null is treated as valid (adjust if needed)
+                return true;
 
             int inspectLength = Math.Min(content.Length, ContentValidationBufferSize);
             string prefix;
             try
             {
-                prefix = Encoding.UTF8.GetString(content, 0, inspectLength);
+                prefix = new UTF8Encoding(false, true).GetString(content, 0, inspectLength);
             }
             catch (DecoderFallbackException)
             {
+                return false;
+            }
+            catch (Exception ex)
+            {
+                TraceLogger.Log($"Unexpected error while decoding content: {ex}", Enums.StatusSeverityType.Error);
                 return false;
             }
 

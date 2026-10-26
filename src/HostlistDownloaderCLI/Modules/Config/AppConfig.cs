@@ -25,6 +25,8 @@ using HostlistDownloaderCLI.Modules.Helpers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+//TODO: AppConfig constructor overwrites the global singleton. _instance = this runs for every instance. In AddEntry/RemoveEntry, the later if (_instance == this) is therefore always false, and the code works only by accident. Any config you construct for preview or tests clobbers global state.
+
 namespace HostlistDownloader.Modules.WindowsSystem
 {
     /// <summary>
@@ -184,6 +186,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             return newReader;
         }
 
+        //TODO: HandleListUpdate can mutate the original list. list as List<string> is always null today because Array.AsReadOnly is used. If anyone passes a real List<string>, the “immutable” config mutates in place. Always copy with [.. list].
         private static string[] HandleListUpdate(IReadOnlyList<string> list, string entry, bool isSelected)
         {
             TraceLogger.Log($"Handling list update for entry '{entry}' (isSelected: {isSelected}).", Enums.StatusSeverityType.Debug);
@@ -210,6 +213,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
         /// <summary>
         /// Save the current configuration state to the JSON file.
         /// </summary>
+        /// TODO: Inconsistent settings.json formatting. SaveToDisk writes minified JSON, while ApplyCorruptedConfigChanges writes indented. The file is hand-edited, so add [JsonSourceGenerationOptions(WriteIndented = true)] to the context and reuse SaveToDisk.
         internal void SaveToDisk(string filePath)
         {
             TraceLogger.Log($"Saving current configuration to '{filePath}'.", Enums.StatusSeverityType.Debug);
@@ -233,7 +237,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to save configuration to '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ErrorCodes.GeneralError);
+                TraceLogger.Log($"Failed to save configuration to '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ExceptionHandler.GeneralError);
             }
         }
 
@@ -258,13 +262,13 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to deserialize settings. {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
+                TraceLogger.Log($"Failed to deserialize settings. {ex}", Enums.StatusSeverityType.Fatal, ExceptionHandler.ConfigurationCorrupted);
                 return;
             }
 
             if (raw == null)
             {
-                TraceLogger.Log($"Deserialized configuration from '{jsonFilePath}' is null.", Enums.StatusSeverityType.Fatal, ErrorCodes.ConfigurationCorrupted);
+                TraceLogger.Log($"Deserialized configuration from '{jsonFilePath}' is null.", Enums.StatusSeverityType.Fatal, ExceptionHandler.ConfigurationCorrupted);
                 return;
             }
             _ = new AppConfig(raw);
@@ -296,7 +300,7 @@ namespace HostlistDownloader.Modules.WindowsSystem
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to create default configuration at '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ErrorCodes.GeneralError);
+                TraceLogger.Log($"Failed to create default configuration at '{filePath}': {ex.Message}", Enums.StatusSeverityType.Fatal, ExceptionHandler.GeneralError);
 
             }
         }

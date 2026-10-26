@@ -51,7 +51,7 @@ namespace HostlistDownloaderCLI.Modules.IO
                     }
                     catch (Exception ex)
                     {
-                        TraceLogger.Log($"Error creating directory {dir}: {ex}", Enums.StatusSeverityType.Fatal, ErrorCodes.DirectoryCreationFailed);
+                        TraceLogger.Log($"Error creating directory {dir}: {ex}", Enums.StatusSeverityType.Fatal, ExceptionHandler.DirectoryCreationFailed);
                     }
                 }
             }
@@ -88,7 +88,7 @@ namespace HostlistDownloaderCLI.Modules.IO
                     Border = Spectre.Console.BoxBorder.Rounded,
                     BorderStyle = Spectre.Console.Style.Parse("yellow")
                 });
-                Environment.Exit(ErrorCodes.GeneralError);
+                Environment.Exit(ExceptionHandler.GeneralError);
             }
         }
 
@@ -515,7 +515,7 @@ namespace HostlistDownloaderCLI.Modules.IO
         {
             return fileName.Equals("_sources.json", StringComparison.OrdinalIgnoreCase) ||
                    fileName.EndsWith(".etag", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.Contains("combined", StringComparison.OrdinalIgnoreCase);
+                   fileName.Contains("HLDcombined", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

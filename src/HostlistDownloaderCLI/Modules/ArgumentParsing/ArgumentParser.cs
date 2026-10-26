@@ -557,7 +557,7 @@ USER-DEFINED RULES:
 
             if (string.IsNullOrEmpty(settingsPath))
             {
-                TraceLogger.Log("Settings file path is not specified. Unable to save configuration.", Enums.StatusSeverityType.Fatal, ErrorCodes.MissingOrInvalidParameters);
+                TraceLogger.Log("Settings file path is not specified. Unable to save configuration.", Enums.StatusSeverityType.Fatal, ExceptionHandler.MissingOrInvalidParameters);
                 return;
             }
 
@@ -625,7 +625,7 @@ USER-DEFINED RULES:
             }
             catch (Exception ex)
             {
-                TraceLogger.Log($"Failed to update configuration: {ex.Message}", Enums.StatusSeverityType.Error, ErrorCodes.InvalidConfigEntry);
+                TraceLogger.Log($"Failed to update configuration: {ex.Message}", Enums.StatusSeverityType.Error, ExceptionHandler.InvalidConfigEntry);
             }
         }
     }

@@ -54,11 +54,11 @@ try
 }
 catch (ArgumentException ex)
 {
-    TraceLogger.Log(ex.Message, Enums.StatusSeverityType.Error, ErrorCodes.InvalidConfigEntry);
-    Environment.Exit(ErrorCodes.InvalidConfigEntry);
+    TraceLogger.Log(ex.Message, Enums.StatusSeverityType.Error, ExceptionHandler.InvalidConfigEntry);
+    Environment.Exit(ExceptionHandler.InvalidConfigEntry);
     return; //Although the environment exits, the return here prevents "Use of unassigned local variable 'argsResult'" error in solution error check.
 }
-
+TraceLogger.DebugMode = true; //Used for test builds.
 if (argsResult.ValidateMode)
 {
     // Validation was requested, run it and exit
@@ -74,7 +74,7 @@ if (argsResult.SearchDomain != null)
 
 if (!NetworkUpChecker.IsNetworkAvailable())
 {
-    TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ErrorCodes.NetworkConnectionFailed);
+    TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ExceptionHandler.NetworkConnectionFailed);
 }
 TraceLogger.ClearExpiredLogs();
 bool freshMode = argsResult.IsFresh;
@@ -95,7 +95,7 @@ else if (HostlistOrchestrator.ProblemDuringUpdate && HostlistOrchestrator.HasDow
     Console.ForegroundColor = ConsoleColor.Yellow;
     ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
     TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully, but issues were detected. Please look through the logs for more information.", Enums.StatusSeverityType.Warn);
-    Environment.ExitCode = ErrorCodes.PartialUpdateWithIssues;
+    Environment.ExitCode = ExceptionHandler.PartialUpdateWithIssues;
 }
 else if (!HostlistOrchestrator.ProblemDuringUpdate && !HostlistOrchestrator.HasDownloadedUpdates)
 {
@@ -108,7 +108,7 @@ else // Problem and no downloads
     Console.ForegroundColor = ConsoleColor.Red;
     ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
     TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warn);
-    Environment.ExitCode = ErrorCodes.UpdateProcessError;
+    Environment.ExitCode = ExceptionHandler.UpdateProcessError;
 }
 
 Console.BackgroundColor = ConsoleColor.Black;

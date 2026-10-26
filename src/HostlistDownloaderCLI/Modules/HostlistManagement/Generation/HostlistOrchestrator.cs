@@ -35,7 +35,6 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
         internal static bool ProblemDuringUpdate;
         internal static bool HasDownloadedUpdates;
         internal static ConcurrentBag<(string Hostlist, string UpdateStatus, double DownloadTime)> UpdateStatistics = [];
-        internal static string UpdateText = "";
         internal static bool hasUpdates = false;
         internal static int NumberOfWarningsDuringDownloadPhase = 0;
         internal static bool IsInDownloadingPhase = false;
@@ -51,7 +50,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             if (blockListInstance.Length == 0 && whiteListInstance.Length == 0)
             {
-                TraceLogger.Log("Blocklist and Whitelist config are not configured.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
+                TraceLogger.Log("Blocklist and Whitelist config are not configured.", Enums.StatusSeverityType.Fatal, ExceptionHandler.FileMissing);
                 return;
             }
 
@@ -154,7 +153,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             if (blockListInstance.Length == 0 && whiteListInstance.Length == 0)
             {
-                TraceLogger.Log("Blocklist and Whitelist config are not configured.", Enums.StatusSeverityType.Fatal, ErrorCodes.FileMissing);
+                TraceLogger.Log("Blocklist and Whitelist config are not configured.", Enums.StatusSeverityType.Fatal, ExceptionHandler.FileMissing);
                 return;
             }
             if (blockListInstance.Length != 0)
@@ -232,10 +231,10 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
             // Track per-URL outcome so we can (a) print a real summary and (b) tell CheckIntegrity which
             // URLs are known-permanently-dead (404) so it doesn't treat them as a file-count mismatch and
             // loop forever trying to "recover" a URL that will never succeed.
-            var outcomes = new System.Collections.Concurrent.ConcurrentDictionary<string, DownloadOutcome>();
+            var outcomes = new ConcurrentDictionary<string, DownloadOutcome>();
             // fileName -> source URL, so SearchManager can attribute a matched line back to the real
             // source URL rather than just an internal "3 - hosts.txt" filename.
-            var sourceManifest = new System.Collections.Concurrent.ConcurrentDictionary<string, string>();
+            var sourceManifest = new ConcurrentDictionary<string, string>();
             IsInDownloadingPhase = true;
             await ConsoleUI.ProgressAsync("Downloading", allUrls.Count, "URLs", async progress =>
             {
@@ -437,7 +436,6 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
             string InternalUpdateStats = $"Downloads took {watch.Elapsed.TotalSeconds:N1}s for {Path.GetFileName(CombinedListLocation)} file processing {ListFolderLocation}: " +
                 $"{succeeded} downloaded, {succeededWithNoETag} downloaded (no ETag), {upToDate} already up to date, {permanentFailures} permanently unreachable, {transientFailures} failed after retries.";
 
-            UpdateText = InternalUpdateStats;
             TraceLogger.Log(InternalUpdateStats, Enums.StatusSeverityType.Info);
             ConsoleUI.ShowDownloadSummary(watch.Elapsed, succeeded, succeededWithNoETag, upToDate, permanentFailures, transientFailures, cancelled, blockedByConfig, contentRejected, securityViolation);
 
@@ -469,7 +467,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
 
             if (isRetryAttempt)
             {
-                TraceLogger.Log($"Integrity check failed again after an automatic retry. Giving up on {CombinedListLocation}. Please run HostlistDownloader again, or with the /fresh argument if the problem persists.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                TraceLogger.Log($"Integrity check failed again after an automatic retry. Giving up on {CombinedListLocation}. Please run HostlistDownloader again, or with the /fresh argument if the problem persists.", Enums.StatusSeverityType.Fatal, ExceptionHandler.IntegrityCheckFailure);
                 return;
             }
 
@@ -478,7 +476,7 @@ namespace HostlistDownloaderCLI.Modules.HostlistManagement.Generation
                 // Every failure was a permanent one (404 etc). Re-downloading will hit the exact same
                 // 404s again, so the "clear and retry" recovery path can't fix anything here - it would
                 // just loop forever. Treat this as a config problem instead of a transient integrity fault.
-                TraceLogger.Log($"Integrity check failed because {permanentFailures} source(s) are permanently unreachable, not due to a transient issue. Automatic recovery would repeat the same failure, so it's being skipped. Please review and fix the affected URL(s) in settings.json.", Enums.StatusSeverityType.Fatal, ErrorCodes.IntegrityCheckFailure);
+                TraceLogger.Log($"Integrity check failed because {permanentFailures} source(s) are permanently unreachable, not due to a transient issue. Automatic recovery would repeat the same failure, so it's being skipped. Please review and fix the affected URL(s) in settings.json.", Enums.StatusSeverityType.Fatal, ExceptionHandler.IntegrityCheckFailure);
                 return;
             }
 

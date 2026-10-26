@@ -113,7 +113,7 @@ namespace HostlistDownloader.Modules.Network
                 });
 
                 TraceLogger.Log("[UPDATE] PowerShell script started. Current process will now exit, please wait 5 seconds for update to complete...", Enums.StatusSeverityType.Info);
-                Environment.Exit(ErrorCodes.UpdateInProgress);
+                Environment.Exit(ExceptionHandler.UpdateInProgress);
             }
             catch (Exception ex)
             {

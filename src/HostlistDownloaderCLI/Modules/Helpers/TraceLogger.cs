@@ -183,7 +183,7 @@ namespace HostlistDownloaderCLI.Modules.Helpers
 
             if (severity == StatusSeverityType.Fatal)
             {
-                Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ErrorCodes.GetDescription(PassedErrorCode)}) - HostDirectory must exit.", StatusSeverityType.Error);
+                Log($"[FAULT STOP] Error Code: {PassedErrorCode} ({ExceptionHandler.GetDescription(PassedErrorCode)}) - HostDirectory must exit.", StatusSeverityType.Error);
                 Environment.Exit(PassedErrorCode);
             }
         }

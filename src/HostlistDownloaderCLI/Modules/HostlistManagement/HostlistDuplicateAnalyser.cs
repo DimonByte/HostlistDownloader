@@ -20,9 +20,10 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
-using HostlistDownloaderCLI.Modules;
 using HostlistDownloaderCLI.Modules.Helpers;
 using HostlistDownloaderCLI.Modules.IO;
+
+//TODO: Dedupe analyser mixes whitelists and blocklists. A whitelist entry that also appears in a blocklist is an override, not a redundancy. The “100% redundant, consider removing” advice could be wrong. Compare block vs block and allow vs allow, and report block/allow conflicts separately. Also normalise lines before comparing, because 0.0.0.0 x.com never matches x.com.
 
 namespace HostlistDownloaderCLI.Modules.HostlistManagement
 {
