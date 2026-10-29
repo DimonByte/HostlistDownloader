@@ -28,7 +28,7 @@ using HostlistDownloader.Lists;
 namespace HostlistDownloader.IO;
 
 /// <summary>
-/// --disable / --enable. Disabling moves each combined list to "&lt;name&gt;.disabled" and leaves an empty file in its
+/// --disable / --enable. Disabling moves each combined list to "name.disabled" and leaves an empty file in its
 /// place, so anything watching the file (a DNS filter) stops blocking. While disabled, updates write to the
 /// .disabled copies; enabling moves them back.
 /// </summary>
