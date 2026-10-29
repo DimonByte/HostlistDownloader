@@ -127,14 +127,14 @@ internal static partial class SourceManager
             if (File.Exists(path))
             {
                 return JsonSerializer.Deserialize(File.ReadAllText(path), StateJsonContext.Default.DictionaryStringString)
-                    ?? new Dictionary<string, string>();
+                    ?? [];
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             TraceLogger.Log($"Could not read {path}: {ex.Message}", LogSeverity.Warn);
         }
-        return new Dictionary<string, string>();
+        return [];
     }
 
     /// <summary>

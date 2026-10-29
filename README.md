@@ -228,8 +228,4 @@ Names are case-insensitive. For `adblock`, `dnsmasq`, `unbound` and `rpz`, an al
 * Output files now use LF line endings and are sorted by default (`output.lineEnding`, `output.sort`). The `hosts` format writes every entry with `0.0.0.0` (`output.hostsBlockIp`), and `HLDcombined-whitelist.txt` contains plain domains.
 * Exit code 50 (wrong directory) no longer exists: the program can be started from any folder.
 
-## Development
-
-Unstable and development patches are pushed to the develop branch. Main will be used for stable updates. Run the tests with `dotnet test src/HostlistDownloaderCLI/HostlistDownloader.slnx`.
-
 <hr>

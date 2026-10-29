@@ -34,7 +34,7 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         using var cancellation = new CancellationTokenSource();
-        ConsoleCancelEventHandler onCancel = (_, e) =>
+        void onCancel(object? _, ConsoleCancelEventArgs e)
         {
             if (cancellation.IsCancellationRequested)
             {
@@ -43,7 +43,7 @@ internal static class Program
             e.Cancel = true;
             cancellation.Cancel();
             TraceLogger.Log("Cancellation requested. Finishing the current step; published lists are left unchanged. Press Ctrl+C again to force quit.", LogSeverity.Warn);
-        };
+        }
         Console.CancelKeyPress += onCancel;
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {

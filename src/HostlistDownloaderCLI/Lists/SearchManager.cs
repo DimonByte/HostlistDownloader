@@ -119,7 +119,7 @@ internal static class SearchManager
             ConsoleUI.ShowTable($"Matches for '{domain}'",
                 ["List", "Source", "Rule", "Match"],
                 matches.OrderBy(m => m.Kind).ThenBy(m => m.Source, StringComparer.OrdinalIgnoreCase)
-                       .Select<Match, IReadOnlyList<string>>(m => new[] { m.Kind.DisplayName(), m.Source, m.Line, m.How }));
+                       .Select<Match, IReadOnlyList<string>>(m => [m.Kind.DisplayName(), m.Source, m.Line, m.How]));
         }
 
         bool blocked = matches.Exists(m => m.Kind == ListKind.Block);

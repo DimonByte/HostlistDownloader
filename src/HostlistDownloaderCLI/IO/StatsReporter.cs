@@ -39,25 +39,25 @@ internal static class StatsReporter
             string name = Path.GetFileName(path);
             if (!File.Exists(path))
             {
-                rows.Add(new[] { name, "missing", "", "" });
+                rows.Add([name, "missing", "", ""]);
                 continue;
             }
 
             var info = new FileInfo(path);
             long entries = ListPublisher.ReadEntries(path).LongCount();
-            rows.Add(new[] { name, entries.ToString("N0"), IOHelpers.FormatBytes(info.Length), info.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) });
+            rows.Add([name, entries.ToString("N0"), IOHelpers.FormatBytes(info.Length), info.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)]);
         }
         ConsoleUI.ShowTable("Output files", ["File", "Entries", "Size", "Last updated"], rows, rightAligned: new HashSet<int> { 1, 2 });
 
         ConsoleUI.ShowTable("Configuration", ["", "Count"],
         [
-            new[] { "Blocklist sources (enabled)", $"{config.EnabledSources(ListKind.Block).Count:N0} of {config.Blocklists.Count:N0}" },
-            new[] { "Whitelist sources (enabled)", $"{config.EnabledSources(ListKind.Allow).Count:N0} of {config.Whitelists.Count:N0}" },
-            new[] { "User block rules", config.UserBlocklist.Count.ToString("N0") },
-            new[] { "User allow rules", config.UserWhitelist.Count.ToString("N0") },
-            new[] { "neverBlock rules", config.NeverBlock.Count.ToString("N0") },
-            new[] { "Output format", config.Format.ToString() },
-            new[] { "Data folder", Paths.Root }
+            ["Blocklist sources (enabled)", $"{config.EnabledSources(ListKind.Block).Count:N0} of {config.Blocklists.Count:N0}"],
+            ["Whitelist sources (enabled)", $"{config.EnabledSources(ListKind.Allow).Count:N0} of {config.Whitelists.Count:N0}"],
+            ["User block rules", config.UserBlocklist.Count.ToString("N0")],
+            ["User allow rules", config.UserWhitelist.Count.ToString("N0")],
+            ["neverBlock rules", config.NeverBlock.Count.ToString("N0")],
+            ["Output format", config.Format.ToString()],
+            ["Data folder", Paths.Root]
         ], rightAligned: new HashSet<int> { 1 });
 
         TraceLogger.Log("Stats report shown.", LogSeverity.Debug);

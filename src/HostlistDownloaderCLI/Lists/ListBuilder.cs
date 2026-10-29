@@ -87,7 +87,7 @@ internal sealed class ListBuilder(AppConfig config, OutputTargets targets)
         var block = new Dictionary<(string, WildcardKind, EntryKind), HostEntry>();
         var allow = new Dictionary<(string, WildcardKind, EntryKind), HostEntry>();
 
-        ReadSources(sources, result, cancellationToken, (in HostEntry entry, ListKind kind) =>
+        ReadSources(sources, result, cancellationToken, (in entry, kind) =>
         {
             if (kind == ListKind.Allow || entry.IsAllow)
             {

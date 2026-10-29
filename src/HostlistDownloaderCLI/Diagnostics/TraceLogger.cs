@@ -167,7 +167,9 @@ internal static class TraceLogger
         string logEntry = DebugMode
             ? $"[{now:yyyy-MM-dd HH:mm:ss.fff}] [PID: {Environment.ProcessId}] [{severityText}] [{memberName}]({lineNumber}): {body}"
             : $"[{now:yyyy-MM-dd HH:mm:ss.fff}] [{severityText}] {body}";
-
+#if DEBUG
+        Debug.WriteLine(logEntry);
+#endif
         lock (Sync)
         {
             WriteLineLocked(now, logEntry, flush: severity is LogSeverity.Warn or LogSeverity.Error or LogSeverity.Fatal or LogSeverity.Notice);

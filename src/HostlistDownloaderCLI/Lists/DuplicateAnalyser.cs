@@ -49,7 +49,7 @@ internal static class DuplicateAnalyser
 
         foreach (ListKind kind in new[] { ListKind.Block, ListKind.Allow })
         {
-            List<LoadedList> group = lists.Where(l => l.Kind == kind).ToList();
+            List<LoadedList> group = [.. lists.Where(l => l.Kind == kind)];
             if (group.Count < 2)
             {
                 continue;
@@ -75,8 +75,8 @@ internal static class DuplicateAnalyser
 
             ConsoleUI.ShowTable($"{Capitalise(kind.DisplayName())} overlap",
                 ["Source", "File", "Entries", "Also in another " + kind.DisplayName(), "Unique", "Note"],
-                rows.OrderByDescending(r => r.Percent).Select<(LoadedList List, int Shared, double Percent), IReadOnlyList<string>>(r => new[]
-                {
+                rows.OrderByDescending(r => r.Percent).Select<(LoadedList List, int Shared, double Percent), IReadOnlyList<string>>(r =>
+                [
                     r.List.DisplayName,
                     r.List.FileName,
                     r.List.Entries.Count.ToString("N0"),
@@ -85,7 +85,7 @@ internal static class DuplicateAnalyser
                     r.List.Entries.Count > 0 && r.Shared == r.List.Entries.Count
                         ? "Fully covered by the other " + kind.DisplayName() + "s"
                         : string.Empty
-                }),
+                ]),
                 caption: "\"Fully covered\" lists add nothing on their own; if two lists cover each other, keep one. Use --dupanalyse <file> for details.",
                 rightAligned: new HashSet<int> { 2, 3, 4 });
         }
@@ -123,15 +123,15 @@ internal static class DuplicateAnalyser
                     ? $"Covers all of {subject.DisplayName}"
                     : $"{other.Entries.Count - shared:N0} entries not in {subject.DisplayName}";
 
-            rows.Add(new[]
-            {
+            rows.Add(
+            [
                 other.DisplayName,
                 shared.ToString("N0"),
                 $"{shared * 100.0 / Math.Max(1, subject.Entries.Count):F1}%",
                 $"{shared * 100.0 / Math.Max(1, other.Entries.Count):F1}%",
                 note,
                 string.Join(", ", subject.Entries.Where(other.Entries.Contains).Take(3))
-            });
+            ]);
         }
 
         if (rows.Count == 0)
@@ -153,21 +153,21 @@ internal static class DuplicateAnalyser
     /// <summary>Entries that a blocklist blocks and a whitelist allows: the whitelist wins, which is usually intended.</summary>
     private static void ShowConflicts(List<LoadedList> lists, LoadedList? target)
     {
-        List<LoadedList> blocks = lists.Where(l => l.Kind == ListKind.Block && (target is null || ReferenceEquals(l, target) || target.Kind == ListKind.Allow)).ToList();
-        List<LoadedList> allows = lists.Where(l => l.Kind == ListKind.Allow && (target is null || ReferenceEquals(l, target) || target.Kind == ListKind.Block)).ToList();
+        List<LoadedList> blocks = [.. lists.Where(l => l.Kind == ListKind.Block && (target is null || ReferenceEquals(l, target) || target.Kind == ListKind.Allow))];
+        List<LoadedList> allows = [.. lists.Where(l => l.Kind == ListKind.Allow && (target is null || ReferenceEquals(l, target) || target.Kind == ListKind.Block))];
 
         var rows = new List<IReadOnlyList<string>>();
         foreach (LoadedList block in blocks)
         {
             foreach (LoadedList allow in allows)
             {
-                List<string> overridden = block.Entries.Where(allow.Entries.Contains).Take(SampleSize + 1).ToList();
+                List<string> overridden = [.. block.Entries.Where(allow.Entries.Contains).Take(SampleSize + 1)];
                 if (overridden.Count == 0)
                 {
                     continue;
                 }
                 int total = overridden.Count > SampleSize ? block.Entries.Count(allow.Entries.Contains) : overridden.Count;
-                rows.Add(new[] { block.DisplayName, allow.DisplayName, total.ToString("N0"), string.Join(", ", overridden.Take(3)) });
+                rows.Add([block.DisplayName, allow.DisplayName, total.ToString("N0"), string.Join(", ", overridden.Take(3))]);
             }
         }
 

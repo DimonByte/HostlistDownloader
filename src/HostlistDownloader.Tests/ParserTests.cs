@@ -56,7 +56,7 @@ public class ParserTests
     {
         List<HostEntry> entries = Parse("127.0.0.1 a.com b.com   # trailing comment", out LineStatus status);
         Assert.Equal(LineStatus.Parsed, status);
-        Assert.Equal(new[] { "a.com", "b.com" }, entries.Select(e => e.Value));
+        Assert.Equal(["a.com", "b.com"], entries.Select(e => e.Value));
         Assert.All(entries, e => Assert.Equal("127.0.0.1", e.SourceIp));
     }
 

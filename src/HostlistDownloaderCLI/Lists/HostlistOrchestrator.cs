@@ -99,11 +99,11 @@ internal sealed class HostlistOrchestrator(AppConfig config)
 
     internal async Task<RunResult> RunAsync(bool fresh, CancellationToken cancellationToken)
     {
-        EnsureSomethingConfigured();
+        EnsureIfValidConfigExists();
         var result = new RunResult();
         List<SourcePlan> plans = PrepareSources();
 
-        List<SourcePlan> downloadable = plans.Where(p => p.IsValid).ToList();
+        List<SourcePlan> downloadable = [.. plans.Where(p => p.IsValid)];
         AddStaticReports(plans, result);
 
         if (downloadable.Count > 0)
@@ -126,9 +126,7 @@ internal sealed class HostlistOrchestrator(AppConfig config)
                 List<SourceReport> reports = await DownloadAsync(downloadable, fresh, "Downloading", cancellationToken).ConfigureAwait(false);
 
                 // Recovery: retry only sources that failed transiently AND have no cached copy. Nothing is deleted first.
-                List<SourcePlan> retry = downloadable
-                    .Where(p => reports.Exists(r => r.FilePath == p.FilePath && r.Outcome == DownloadOutcome.TransientFailure && !r.HasCachedCopy))
-                    .ToList();
+                List<SourcePlan> retry = [.. downloadable.Where(p => reports.Exists(r => r.FilePath == p.FilePath && r.Outcome == DownloadOutcome.TransientFailure && !r.HasCachedCopy))];
                 if (retry.Count > 0)
                 {
                     TraceLogger.Log($"{retry.Count} source(s) failed and have no cached copy. Retrying them once in {RecoveryDelay.TotalSeconds:N0}s...", LogSeverity.Warn);
@@ -156,7 +154,7 @@ internal sealed class HostlistOrchestrator(AppConfig config)
     /// <summary>--merge: rebuild the outputs from cached copies without touching the network.</summary>
     internal RunResult RunOffline(CancellationToken cancellationToken)
     {
-        EnsureSomethingConfigured();
+        EnsureIfValidConfigExists();
         var result = new RunResult();
         List<SourcePlan> plans = PrepareSources();
         AddStaticReports(plans, result);
@@ -172,7 +170,10 @@ internal sealed class HostlistOrchestrator(AppConfig config)
         return result;
     }
 
-    private void EnsureSomethingConfigured()
+    /// <summary>
+    /// Ensure that at least one blocklist source or user block rule is configured, and that the settings.json file has no errors.
+    /// </summary>
+    private void EnsureIfValidConfigExists()
     {
         if (config.HasErrors)
         {
@@ -383,19 +384,19 @@ internal sealed class HostlistOrchestrator(AppConfig config)
         var ordered = result.Sources.OrderBy(s => s.Kind).ThenBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
         ConsoleUI.ShowTable("Sources",
             ["List", "Source", "Result", "Time", "Details"],
-            ordered.Select<SourceReport, IReadOnlyList<string>>(s => new[]
-            {
+            ordered.Select<SourceReport, IReadOnlyList<string>>(s =>
+            [
                 s.Kind.DisplayName(),
                 s.DisplayName,
                 ColourOutcome(s.Outcome),
                 s.Elapsed == TimeSpan.Zero ? "" : $"{s.Elapsed.TotalSeconds:N1}s",
                 s.Outcome.IsProblem() && s.HasCachedCopy ? s.Message + " Using the cached copy." : s.Message
-            }),
+            ]),
             rightAligned: new HashSet<int> { 3 },
             markupColumns: new HashSet<int> { 2 });
 
         var counts = result.Sources.GroupBy(s => s.Outcome).OrderBy(g => g.Key).ToList();
-        List<IReadOnlyList<string>> rows = counts.Select<IGrouping<DownloadOutcome, SourceReport>, IReadOnlyList<string>>(g => new[] { ColourOutcome(g.Key), g.Count().ToString("N0") }).ToList();
+        List<IReadOnlyList<string>> rows = [.. counts.Select<IGrouping<DownloadOutcome, SourceReport>, IReadOnlyList<string>>(g => [ColourOutcome(g.Key), g.Count().ToString("N0")])];
         rows.Add([ConsoleUI.Colour("Total configured", "bold"), result.Sources.Count.ToString("N0")]);
         string? caption = result.DownloadWarnings > 0 ? $"{result.DownloadWarnings:N0} warning(s) were logged while downloading. See the log for details." : null;
         ConsoleUI.ShowTable("Download summary", ["Result", "Count"], rows, caption, rightAligned: new HashSet<int> { 1 }, markupColumns: new HashSet<int> { 0 });
@@ -417,35 +418,35 @@ internal sealed class HostlistOrchestrator(AppConfig config)
         };
         if (build.Compressed > 0)
         {
-            rows.Add(new[] { "Removed by compression (parent already blocked)", build.Compressed.ToString("N0") });
+            rows.Add(["Removed by compression (parent already blocked)", build.Compressed.ToString("N0")]);
         }
         if (build.Exceptions > 0)
         {
-            rows.Add(new[] { "Exception rules added (allowed subdomain of a blocked domain)", build.Exceptions.ToString("N0") });
+            rows.Add(["Exception rules added (allowed subdomain of a blocked domain)", build.Exceptions.ToString("N0")]);
         }
         if (build.WildcardsStripped > 0)
         {
-            rows.Add(new[] { "Wildcards written as base domain", build.WildcardsStripped.ToString("N0") });
+            rows.Add(["Wildcards written as base domain", build.WildcardsStripped.ToString("N0")]);
         }
         if (build.WildcardsDropped > 0)
         {
-            rows.Add(new[] { "Wildcards dropped (not supported by format)", build.WildcardsDropped.ToString("N0") });
+            rows.Add(["Wildcards dropped (not supported by format)", build.WildcardsDropped.ToString("N0")]);
         }
         if (build.NotApplicable > 0)
         {
-            rows.Add(new[] { "Entries not applicable to format", build.NotApplicable.ToString("N0") });
+            rows.Add(["Entries not applicable to format", build.NotApplicable.ToString("N0")]);
         }
-        rows.Add(new[] { "Invalid lines skipped", build.Parse.Invalid.ToString("N0") });
-        rows.Add(new[] { "Unsupported rules skipped (cosmetic, URL path, redirect)", build.Parse.Unsupported.ToString("N0") });
-        rows.Add(new[] { "Invalid domains skipped", build.Parse.InvalidDomains.ToString("N0") });
-        rows.Add(new[] { "Public suffixes skipped", build.Parse.PublicSuffixesRejected.ToString("N0") });
-        rows.Add(new[] { "localhost-style entries skipped", build.Parse.JunkEntries.ToString("N0") });
-        rows.Add(new[] { Paths.CombinedBlockListFileName, build.BlockListCount.ToString("N0") });
-        rows.Add(new[] { Paths.CombinedWhiteListFileName, build.AllowListCount.ToString("N0") });
-        rows.Add(new[] { Paths.CombinedListFileName, build.CombinedCount.ToString("N0") });
+        rows.Add(["Invalid lines skipped", build.Parse.Invalid.ToString("N0")]);
+        rows.Add(["Unsupported rules skipped (cosmetic, URL path, redirect)", build.Parse.Unsupported.ToString("N0")]);
+        rows.Add(["Invalid domains skipped", build.Parse.InvalidDomains.ToString("N0")]);
+        rows.Add(["Public suffixes skipped", build.Parse.PublicSuffixesRejected.ToString("N0")]);
+        rows.Add(["localhost-style entries skipped", build.Parse.JunkEntries.ToString("N0")]);
+        rows.Add([Paths.CombinedBlockListFileName, build.BlockListCount.ToString("N0")]);
+        rows.Add([Paths.CombinedWhiteListFileName, build.AllowListCount.ToString("N0")]);
+        rows.Add([Paths.CombinedListFileName, build.CombinedCount.ToString("N0")]);
         if (publish?.Success == true)
         {
-            rows.Add(new[] { "Change since previous version", $"+{publish.Added:N0} / -{publish.Removed:N0}" });
+            rows.Add(["Change since previous version", $"+{publish.Added:N0} / -{publish.Removed:N0}"]);
         }
 
         ConsoleUI.ShowTable("Build", ["", "Count"], rows, rightAligned: new HashSet<int> { 1 });

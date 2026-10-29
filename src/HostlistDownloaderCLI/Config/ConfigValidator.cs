@@ -101,14 +101,14 @@ internal static class ConfigValidator
         bool fixing = mode == ValidationMode.Fix;
         ConsoleUI.ShowTable(fixing ? "settings.json problems (fixing)" : "settings.json problems",
             ["Severity", "Setting", "Value", "Problem", fixing ? "Fix applied" : "Fix (with --fix)"],
-            issues.Select<ValidationIssue, IReadOnlyList<string>>(i => new[]
-            {
+            issues.Select<ValidationIssue, IReadOnlyList<string>>(i =>
+            [
                 i.Severity.ToString(),
                 i.Setting,
                 i.Value,
                 i.Problem,
                 i.Fix ?? "Manual edit required"
-            }));
+            ]));
 
         foreach (ValidationIssue issue in issues)
         {

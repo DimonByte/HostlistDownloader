@@ -238,9 +238,6 @@ internal static class ArgumentParser
                 sb.AppendLine($"  {names,-34} {option.Help}");
             }
         }
-
-        sb.AppendLine();
-        sb.AppendLine("The old /slash spellings (e.g. /q, /fresh, /search) still work but are deprecated.");
         sb.AppendLine("Exit codes and every settings.json option are described in the README on GitHub.");
         return sb.ToString();
     }
