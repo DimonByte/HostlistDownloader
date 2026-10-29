@@ -8,7 +8,12 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
@@ -27,5 +32,17 @@ jobs:
       working-directory: ./src/HostlistDownloaderCLI
 
     - name: Test
-      run: dotnet test HostlistDownloader.slnx --no-build --verbosity normal
+      run: dotnet test HostlistDownloader.slnx --configuration Release --no-build --verbosity normal
+      working-directory: ./src/HostlistDownloaderCLI
+
+    # Checks that the trimmed single-file executable still publishes on each OS (not uploaded).
+    - name: Publish (trimmed, single file)
+      shell: bash
+      run: |
+        case "${{ runner.os }}" in
+          Windows) rid=win-x64 ;;
+          Linux)   rid=linux-x64 ;;
+          macOS)   rid=osx-arm64 ;;
+        esac
+        dotnet publish HostlistDownloaderCLI.csproj -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ./ci-publish
       working-directory: ./src/HostlistDownloaderCLI

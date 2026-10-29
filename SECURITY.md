@@ -6,7 +6,7 @@ We provide security updates only for the latest version:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| Current Version of v2.x   | ✅ |
+| Current Version of v3.x   | ✅ |
 
 ## Reporting a Vulnerability
 

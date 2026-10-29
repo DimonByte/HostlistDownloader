@@ -10,13 +10,27 @@
     <Description>A basic utility that downloads multiple host files from remote URLs, removes empty lines and comments, and consolidates them into a single processed file for use with ad filtering services. </Description>
     <PackageProjectUrl>https://github.com/DimonByte/HostlistDownloader</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DimonByte/HostlistDownloader</RepositoryUrl>
-    <FileVersion>2.0.3</FileVersion>
-    <AssemblyVersion>2.0.3.*</AssemblyVersion>
+    <RootNamespace>HostlistDownloader</RootNamespace>
+    <FileVersion>3.0.0</FileVersion>
+    <AssemblyVersion>3.0.0.*</AssemblyVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <NeutralLanguage>en-GB</NeutralLanguage>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <Deterministic>false</Deterministic>
+    <!-- Needed for IDE0005 (unused usings) and other code-style rules from .editorconfig to run during build. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- The XML doc file is only for IDE tooltips; don't ship it with published builds. -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <!-- Releases are published trimmed and single-file; surface any incompatible code at build time. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HostlistDownloader.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Include="..\..\LICENSE">
