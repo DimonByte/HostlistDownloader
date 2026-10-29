@@ -21,6 +21,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- The XML doc file is only for IDE tooltips; don't ship it with published builds. -->
+    <PublishDocumentationFile>false</PublishDocumentationFile>
     <!-- Releases are published trimmed and single-file; surface any incompatible code at build time. -->
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>

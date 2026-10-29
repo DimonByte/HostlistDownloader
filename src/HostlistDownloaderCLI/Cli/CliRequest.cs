@@ -38,6 +38,8 @@ internal enum CommandKind
     DuplicateAnalyse,
     GetSource,
     EditConfig,
+    Disable,
+    Enable,
     Help,
     Version
 }

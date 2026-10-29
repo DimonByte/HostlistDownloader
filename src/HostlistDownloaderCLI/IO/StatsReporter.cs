@@ -57,6 +57,7 @@ internal static class StatsReporter
             ["User allow rules", config.UserWhitelist.Count.ToString("N0")],
             ["neverBlock rules", config.NeverBlock.Count.ToString("N0")],
             ["Output format", config.Format.ToString()],
+            ["Combined lists", Paths.ListsDisabled ? "DISABLED (run --enable)" : "enabled"],
             ["Data folder", Paths.Root]
         ], rightAligned: new HashSet<int> { 1 });
 

@@ -35,7 +35,16 @@ internal sealed record SourceFile(string Path, string DisplayName, ListKind Kind
 /// <summary>Final locations of the three outputs; the builder writes "&lt;path&gt;.tmp" next to each.</summary>
 internal sealed record OutputTargets(string BlockList, string AllowList, string Combined)
 {
-    internal static OutputTargets Default => new(Paths.CombinedBlockListFile, Paths.CombinedWhiteListFile, Paths.CombinedListFile);
+    /// <summary>The files consumers read. While disabled (--disable) these are empty placeholders.</summary>
+    internal static OutputTargets Published => new(Paths.CombinedBlockListFile, Paths.CombinedWhiteListFile, Paths.CombinedListFile);
+
+    /// <summary>
+    /// Where builds, publishing and --revert write. While the lists are disabled this is the ".disabled" copies, so
+    /// updates keep running and --enable restores the latest lists.
+    /// </summary>
+    internal static OutputTargets Default => Paths.ListsDisabled
+        ? new(Paths.CombinedBlockListFile + Paths.DisabledSuffix, Paths.CombinedWhiteListFile + Paths.DisabledSuffix, Paths.CombinedListFile + Paths.DisabledSuffix)
+        : Published;
 
     internal IEnumerable<string> All => [BlockList, AllowList, Combined];
 }

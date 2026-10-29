@@ -112,6 +112,10 @@ internal static class ArgumentParser
             (b, n, v) => b.SetCommand(CommandKind.DuplicateAnalyse, n, v)),
         new("--getsource", [], ["/getsource", "/gs"], "file", SectionCommands, "Show the URL a cached file was downloaded from.",
             (b, n, v) => b.SetCommand(CommandKind.GetSource, n, v)),
+        new("--disable", [], [], null, SectionCommands, "Replace the combined lists with empty files (filtering off). Updates keep running in the background.",
+            (b, n, _) => b.SetCommand(CommandKind.Disable, n)),
+        new("--enable", [], [], null, SectionCommands, "Restore the combined lists after --disable, including any updates made meanwhile.",
+            (b, n, _) => b.SetCommand(CommandKind.Enable, n)),
 
         // Update options
         new("--fresh", [], ["/fresh", "/fr"], null, SectionUpdate, "Re-download every source, ignoring ETags and size sanity checks, then rebuild.", (b, _, _) => b.Fresh = true),

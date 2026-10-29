@@ -142,6 +142,18 @@ internal static class CommandDispatcher
             case CommandKind.GetSource:
                 return GetSource(request.Argument!);
 
+            case CommandKind.Disable:
+            {
+                using RunLock runLock = RunLock.Acquire();
+                return ListSwitch.Disable();
+            }
+
+            case CommandKind.Enable:
+            {
+                using RunLock runLock = RunLock.Acquire();
+                return ListSwitch.Enable();
+            }
+
             case CommandKind.EditConfig:
             {
                 using RunLock runLock = RunLock.Acquire();

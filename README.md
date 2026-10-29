@@ -68,6 +68,8 @@ Run with no command to update the lists. Only one command can be given at a time
 | | `--dupscan` | | How much each cached list overlaps with the others (blocklists against blocklists, whitelists against whitelists, plus blocklist entries overridden by a whitelist). |
 | | `--dupanalyse <file>` | `<file>` | Detailed overlap report for one cached list (file name or source name). |
 | | `--getsource <file>` | `<file>` | Show the URL a cached file was downloaded from. |
+| | `--disable` | | Replace the three combined lists with empty files (turns filtering off for anything watching them). Scheduled updates keep running and write to `*.disabled` copies. |
+| | `--enable` | | Put the lists back, including any updates made while disabled. |
 | | `--help` or `-h` / `--version` | | Help and version. |
 | **Update options** | `--fresh` | | Re-download every source, ignoring cache validators and the size sanity check, then rebuild. |
 | **Global options** | `--quiet` or `-q` | | No console output (the log file is still written; fatal errors go to stderr). |

@@ -53,6 +53,11 @@ internal static class Paths
     internal static string UpdateCheckStampFile => Path.Combine(StateFolder, "last-update-check.txt");
     internal static string BuildStampFile => Path.Combine(StateFolder, "last-build.txt");
     internal static string LockFile => Path.Combine(StateFolder, "hld.lock");
+    internal static string DisabledMarkerFile => Path.Combine(StateFolder, "lists-disabled.txt");
+    internal const string DisabledSuffix = ".disabled";
+
+    /// <summary>True after --disable: the published files are empty and real output goes to the .disabled copies.</summary>
+    internal static bool ListsDisabled => File.Exists(DisabledMarkerFile);
     internal static string HostfilesFolder => Path.Combine(Root, "hostfiles");
     internal static string BlockListFolder => Path.Combine(HostfilesFolder, "blocklist");
     internal static string WhiteListFolder => Path.Combine(HostfilesFolder, "whitelist");
