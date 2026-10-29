@@ -20,100 +20,87 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
-using HostlistDownloader.Modules.Network;
-using HostlistDownloader.Modules.WindowsSystem;
-using HostlistDownloader.Modules.WindowsSystem.Config;
-using HostlistDownloaderCLI.Modules;
-using HostlistDownloaderCLI.Modules.ArgumentParsing;
-using HostlistDownloaderCLI.Modules.Helpers;
-using HostlistDownloaderCLI.Modules.HostlistManagement.Generation;
-using HostlistDownloaderCLI.Modules.IO;
-using HostlistDownloaderCLI.Modules.Network;
-using System.Diagnostics;
-using System.Reflection;
-Console.OutputEncoding = System.Text.Encoding.UTF8;
-Console.WriteLine($"HostlistDownloader version {Assembly.GetExecutingAssembly().GetName().Version}\nCopyright (c) {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright} under MIT License. Uses other libraries which are subject to their own licenses which is stored in the 'License' page on GitHub.");
-Stopwatch watch = Stopwatch.StartNew();
+using HostlistDownloader.Cli;
+using HostlistDownloader.Core;
+using HostlistDownloader.Diagnostics;
+using HostlistDownloader.UI;
 
-// Set current directory to application base directory
-Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+namespace HostlistDownloader;
 
-// Initialize necessary files/directories and config
-IOManager.CreateNecessaryDirectoriesAndFiles();
-TraceLogger.Log("[START] Initializing HostlistDownloader...");
-AppConfig.Init(Paths.SettingJsonFileLocation);
-AppConfigHealthChecker.CheckForInvalidConfig();
-
-// --- PARSE ARGUMENTS ---
-ArgumentResult argsResult;
-try
+internal static class Program
 {
-    argsResult = ArgumentParser.Parse(args);
-    ArgumentParser.ApplySideEffects(argsResult);
-    TraceLogger.DebugMode = argsResult.DebugMode;
-}
-catch (ArgumentException ex)
-{
-    TraceLogger.Log(ex.Message, Enums.StatusSeverityType.Error, ExceptionHandler.InvalidConfigEntry);
-    Environment.Exit(ExceptionHandler.InvalidConfigEntry);
-    return; //Although the environment exits, the return here prevents "Use of unassigned local variable 'argsResult'" error in solution error check.
-}
-TraceLogger.DebugMode = true; //Used for test builds.
-if (argsResult.ValidateMode)
-{
-    // Validation was requested, run it and exit
-    AppConfigHealthChecker.ValidateConfig(argsResult.FixMode, !argsResult.FixMode);
-    return;
-}
+    private static async Task<int> Main(string[] args)
+    {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-if (argsResult.SearchDomain != null)
-{
-    SearchManager.Search(argsResult.SearchDomain);
-    return;
-}
+        using var cancellation = new CancellationTokenSource();
+        ConsoleCancelEventHandler onCancel = (_, e) =>
+        {
+            if (cancellation.IsCancellationRequested)
+            {
+                return; // second Ctrl+C: let the process terminate immediately
+            }
+            e.Cancel = true;
+            cancellation.Cancel();
+            TraceLogger.Log("Cancellation requested. Finishing the current step; published lists are left unchanged. Press Ctrl+C again to force quit.", LogSeverity.Warn);
+        };
+        Console.CancelKeyPress += onCancel;
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            TraceLogger.Log($"Unhandled exception: {e.ExceptionObject}", LogSeverity.Fatal);
+            TraceLogger.Shutdown();
+        };
 
-if (!NetworkUpChecker.IsNetworkAvailable())
-{
-    TraceLogger.Log("Unable to get a network connection!", Enums.StatusSeverityType.Fatal, ExceptionHandler.NetworkConnectionFailed);
-}
-TraceLogger.ClearExpiredLogs();
-bool freshMode = argsResult.IsFresh;
-//TraceLogger.DebugMode = true;
-HostlistOrchestrator.StartListProcessing(freshMode);
+        int exitCode;
+        try
+        {
+            CliRequest request;
+            try
+            {
+                request = ArgumentParser.Parse(args);
+            }
+            catch (CliException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return ex.ExitCode;
+            }
 
-watch.Stop();
+            TraceLogger.QuietMode = request.Global.Quiet;
+#if DEBUG
+            TraceLogger.DebugMode = true; // development builds always log debug detail
+#else
+            TraceLogger.DebugMode = request.Global.Debug;
+#endif
 
-// Handle Post-Update Status
-if (!HostlistOrchestrator.ProblemDuringUpdate && HostlistOrchestrator.HasDownloadedUpdates)
-{
-    Console.ForegroundColor = ConsoleColor.Green;
-    ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
-    TraceLogger.Log($"[UPDATED] Hostfiles updated successfully.", Enums.StatusSeverityType.Notice);
-}
-else if (HostlistOrchestrator.ProblemDuringUpdate && HostlistOrchestrator.HasDownloadedUpdates)
-{
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
-    TraceLogger.Log($"[UPDATED WITH ISSUES] Some hostfiles have updated successfully, but issues were detected. Please look through the logs for more information.", Enums.StatusSeverityType.Warn);
-    Environment.ExitCode = ExceptionHandler.PartialUpdateWithIssues;
-}
-else if (!HostlistOrchestrator.ProblemDuringUpdate && !HostlistOrchestrator.HasDownloadedUpdates)
-{
-    Console.ForegroundColor = ConsoleColor.Cyan;
-    ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
-    TraceLogger.Log($"[UP TO DATE] Hostfiles are already up to date!", Enums.StatusSeverityType.Notice);
-}
-else // Problem and no downloads
-{
-    Console.ForegroundColor = ConsoleColor.Red;
-    ConsoleUI.PrintUpdateStats(watch.Elapsed.TotalSeconds);
-    TraceLogger.Log($"[PROBLEM] A problem was ran into when updating your hostlists. Please check the console output or log files for more information.", Enums.StatusSeverityType.Warn);
-    Environment.ExitCode = ExceptionHandler.UpdateProcessError;
-}
+            if (!request.Global.NoBanner && request.Command is not (CommandKind.Help or CommandKind.Version))
+            {
+                ConsoleUI.ShowBanner();
+            }
 
-Console.BackgroundColor = ConsoleColor.Black;
-Console.ForegroundColor = ConsoleColor.White;
+            exitCode = await CommandDispatcher.ExecuteAsync(request, cancellation.Token).ConfigureAwait(false);
+        }
+        catch (FatalException ex)
+        {
+            exitCode = ex.ExitCode;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            TraceLogger.Log("Cancelled. The published lists were not changed.", LogSeverity.Warn);
+            exitCode = ExitCodes.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            TraceLogger.Log($"Unexpected error: {ex}", LogSeverity.Fatal);
+            exitCode = ExitCodes.GeneralError;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancel;
+            Console.ResetColor();
+        }
 
-UpdateChecker.IsUpdateAvailable();
-
-TraceLogger.Log($"[PROGRAM CLOSED WITH CODE: {Environment.ExitCode}]", Enums.StatusSeverityType.Notice);
+        TraceLogger.Log($"[PROGRAM CLOSED WITH CODE: {exitCode}] {ExitCodes.GetDescription(exitCode)}", LogSeverity.Debug);
+        TraceLogger.Shutdown();
+        return exitCode;
+    }
+}
